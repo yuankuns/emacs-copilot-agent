@@ -328,8 +328,7 @@ CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING)."
     (when token
       (copilot-agent-api--curl-post
        url
-       `(("Authorization" . ,(concat "Bearer " token))
-         ("Content-Type"  . "application/json"))
+       (list (concat "Authorization: Bearer " token))
        body
        (lambda (raw-output http-error)
          (if http-error
