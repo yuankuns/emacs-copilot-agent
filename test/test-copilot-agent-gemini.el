@@ -459,22 +459,30 @@
             (should (equal (cdr (assq 'project creds)) "my-project-123"))))
       (delete-directory tmp-dir t))))
 
-(ert-deftest gemini-cli/send-cli-errors-without-project ()
-  "send-cli calls callback with error when no project ID is saved."
+(ert-deftest gemini-cli/send-cli-fetches-project-on-demand ()
+  "send-cli fetches and caches the project ID when it is missing from saved creds."
   (let* ((tmp-dir  (make-temp-file "gemini-test-noproj" t))
          (tmp-file (expand-file-name "gemini_oauth_creds.json" tmp-dir))
          (copilot-agent-gemini--cli-creds-file tmp-file)
-         err-msg)
+         fetched)
     (unwind-protect
         (progn
-          ;; Save creds WITHOUT a project field
+          ;; Save creds WITHOUT a project field (simulates old login)
           (copilot-agent-gemini--cli-save-creds "tok" "ref" 99999999999)
-          (copilot-agent-gemini--send-cli
-           (list :model "gemini-2.0-flash" :messages '() :tools nil
-                 :system-prompt nil :max-tokens 512)
-           (lambda (_resp err) (setq err-msg err)))
-          (should (stringp err-msg))
-          (should (string-match-p "project" err-msg)))
+          (cl-letf (((symbol-function 'copilot-agent-gemini--cli-valid-access-token)
+                     (lambda () "tok"))
+                    ((symbol-function 'copilot-agent-gemini--cli-fetch-project)
+                     (lambda (_tok) (setq fetched t) "fetched-project-id"))
+                    ((symbol-function 'copilot-agent-api--curl-post)
+                     (lambda (_url _hdrs _body _cb) nil)))  ; stop after project fetch
+            (copilot-agent-gemini--send-cli
+             (list :model "gemini-2.0-flash" :messages '() :tools nil
+                   :system-prompt nil :max-tokens 512)
+             #'ignore))
+          (should fetched)
+          ;; Project should now be persisted in the credentials file
+          (should (equal (cdr (assq 'project (copilot-agent-gemini--cli-load-creds)))
+                         "fetched-project-id")))
       (delete-directory tmp-dir t))))
 
 ;;; ---------- CLI Auth — Auth Mode Dispatch ----------

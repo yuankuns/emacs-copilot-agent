@@ -586,23 +586,32 @@ Dispatches to API-key or CLI-OAuth mode based on `copilot-agent-gemini-auth-mode
 The Code Assist endpoint wraps the standard Gemini request in:
   {\"model\": MODEL, \"project\": PROJECT, \"request\": {GEMINI-BODY}}
 and returns the Gemini response nested under a \"response\" key."
-  (let* ((creds   (copilot-agent-gemini--cli-load-creds))
-         (project (and creds (cdr (assq 'project creds))))
-         (token   (condition-case e
+  (let* ((token   (condition-case e
                       (copilot-agent-gemini--cli-valid-access-token)
                     (error (funcall callback nil (error-message-string e)) nil))))
-    (unless project
-      (funcall callback nil
-               "No Gemini project ID saved.  Re-run M-x copilot-agent-gemini-login.")
-      (setq token nil))
     (when token
-      (let* ((model     (or (plist-get session :model) copilot-agent-gemini-default-model))
+      (let* ((creds   (copilot-agent-gemini--cli-load-creds))
+             (project (or (cdr (assq 'project creds))
+                          ;; Project missing from old credentials — fetch and cache it now
+                          (let ((p (condition-case e
+                                       (copilot-agent-gemini--cli-fetch-project token)
+                                     (error (funcall callback nil (error-message-string e))
+                                            nil))))
+                            (when p
+                              (copilot-agent-gemini--cli-save-creds
+                               (cdr (assq 'access_token  creds))
+                               (cdr (assq 'refresh_token creds))
+                               (cdr (assq 'expires       creds))
+                               p))
+                            p)))
+             (model     (or (plist-get session :model) copilot-agent-gemini-default-model))
              (url       (concat copilot-agent-gemini--code-assist-url ":generateContent"))
              (inner-req (json-read-from-string (copilot-agent-gemini--build-request session)))
-             (body      (json-encode `((model   . ,model)
-                                      (project . ,project)
-                                      (request . ,inner-req)))))
-        (copilot-agent-api--curl-post
+             (body      (and project
+                            (json-encode `((model   . ,model)
+                                          (project . ,project)
+                                          (request . ,inner-req))))))
+        (when body (copilot-agent-api--curl-post
          url
          (list (concat "Authorization: Bearer " token))
          body
@@ -617,9 +626,7 @@ and returns the Gemini response nested under a \"response\" key."
                     (parsed (copilot-agent-gemini--parse-response inner)))
                (if (plist-get parsed :error)
                    (funcall callback nil (plist-get parsed :error))
-                 (funcall callback parsed nil))))))))))
-
-;;; ---------- Tool Result Message Builder ----------
+                 (funcall callback parsed nil)))))))))))
 
 (defun copilot-agent-gemini-make-tool-result-message (tool-results)
   "Build a Gemini user-role message with TOOL-RESULTS.
