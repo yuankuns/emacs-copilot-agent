@@ -237,8 +237,16 @@ CALLBACKS plist keys (all optional):
                            "Tool execution declined by user.")))
           (when on-tool-result (funcall on-tool-result name result))
           (push (list :tool-use-id id :content result) results))))
-    (copilot-agent-api--append-message
-     session (funcall make-result-fn (nreverse results)))
+    ;; make-tool-result-fn may return either a single message alist (Anthropic,
+    ;; Gemini) or a list of message alists (OpenAI-compatible providers such as
+    ;; Qwen, which require one {"role":"tool"} message per tool call).
+    ;; Distinguish by checking whether the first element of the return value is
+    ;; itself a list (= list of messages) rather than a cons pair (= single msg).
+    (let ((msg-or-list (funcall make-result-fn (nreverse results))))
+      (if (and msg-or-list (listp (car msg-or-list)))
+          (dolist (m msg-or-list)
+            (copilot-agent-api--append-message session m))
+        (copilot-agent-api--append-message session msg-or-list)))
     (copilot-agent-api--loop session callbacks)))
 
 (provide 'copilot-agent-api)
