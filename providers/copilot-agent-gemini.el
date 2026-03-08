@@ -272,7 +272,7 @@ Signals an error if no credentials exist (run M-x copilot-agent-gemini-login)."
 (defconst copilot-agent-gemini--oauth-auth-url
   "https://accounts.google.com/o/oauth2/v2/auth")
 (defconst copilot-agent-gemini--oauth-scopes
-  "https://www.googleapis.com/auth/cloud-platform openid email profile")
+  "https://www.googleapis.com/auth/generative-language openid email profile")
 (defconst copilot-agent-gemini--oauth-token-url
   "https://oauth2.googleapis.com/token")
 
