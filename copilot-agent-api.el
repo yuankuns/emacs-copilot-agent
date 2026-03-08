@@ -240,13 +240,19 @@ CALLBACKS plist keys (all optional):
     ;; make-tool-result-fn may return either a single message alist (Anthropic,
     ;; Gemini) or a list of message alists (OpenAI-compatible providers such as
     ;; Qwen, which require one {"role":"tool"} message per tool call).
-    ;; Distinguish by checking whether the first element of the return value is
-    ;; itself a list (= list of messages) rather than a cons pair (= single msg).
+    ;;
+    ;; Distinguish the two shapes by inspecting (caar result):
+    ;;   single message  : ((role . "user") …)  → caar = symbol `role'
+    ;;   list of messages: (((role . "tool") …) …) → caar = cons cell
+    ;; Using `listp' on (car result) alone is not sufficient — both a cons pair
+    ;; (role . "user") and a proper list satisfy listp in Emacs Lisp.
     (let ((msg-or-list (funcall make-result-fn (nreverse results))))
-      (if (and msg-or-list (listp (car msg-or-list)))
-          (dolist (m msg-or-list)
-            (copilot-agent-api--append-message session m))
-        (copilot-agent-api--append-message session msg-or-list)))
+      (if (symbolp (caar msg-or-list))
+          ;; Single message alist — first key is a symbol like 'role
+          (copilot-agent-api--append-message session msg-or-list)
+        ;; List of message alists — first element is itself an alist
+        (dolist (m msg-or-list)
+          (copilot-agent-api--append-message session m))))
     (copilot-agent-api--loop session callbacks)))
 
 (provide 'copilot-agent-api)

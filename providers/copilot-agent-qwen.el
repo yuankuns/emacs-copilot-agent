@@ -48,12 +48,20 @@
     "/" "_"
     (replace-regexp-in-string "+" "-" (base64-encode-string s t)))))
 
+(defun copilot-agent-qwen--random-bytes (n)
+  "Return a unibyte string of N cryptographically random bytes.
+Uses `gnutls-random' when available (GnuTLS linked Emacs), otherwise
+falls back to Emacs `random' which is not cryptographic but still
+produces a unique-per-session verifier for the PKCE device flow."
+  (if (fboundp 'gnutls-random)
+      (gnutls-random n)
+    (apply #'unibyte-string (mapcar (lambda (_) (random 256)) (make-list n nil)))))
+
 (defun copilot-agent-qwen--pkce ()
   "Return (VERIFIER . CHALLENGE) for PKCE-S256.
 VERIFIER is a base64url string of 32 random bytes.
 CHALLENGE is the base64url-encoded SHA-256 hash of VERIFIER."
-  (let* ((raw      (apply #'unibyte-string
-                          (mapcar (lambda (_) (random 256)) (make-list 32 nil))))
+  (let* ((raw      (copilot-agent-qwen--random-bytes 32))
          (verifier  (copilot-agent-qwen--base64url raw))
          (hash      (secure-hash 'sha256 verifier nil nil t))  ; binary bytes
          (challenge (copilot-agent-qwen--base64url hash)))
@@ -72,11 +80,16 @@ Returns parsed JSON alist or signals an error."
          (url-request-extra-headers
           '(("Content-Type" . "application/x-www-form-urlencoded")
             ("Accept"       . "application/json")))
-         (url-request-data (encode-coding-string body 'utf-8)))
-    (with-current-buffer (url-retrieve-synchronously url t t 30)
-      (goto-char (point-min))
-      (re-search-forward "^\r?$" nil t)  ; skip HTTP headers
-      (json-read))))
+         (url-request-data (encode-coding-string body 'utf-8))
+         (buf (url-retrieve-synchronously url t t 30)))
+    (unless buf
+      (error "Qwen: network error — no response from %s" url))
+    (unwind-protect
+        (with-current-buffer buf
+          (goto-char (point-min))
+          (re-search-forward "^\r?$" nil t)  ; skip HTTP headers
+          (json-read))
+      (when (buffer-live-p buf) (kill-buffer buf)))))
 
 ;;; ---------- Credential Storage ----------
 
@@ -134,6 +147,8 @@ Signals an error if no credentials exist (run M-x copilot-agent-qwen-login)."
     ;; Refresh if token expires within 60 s
     (if (and expires (> (- expires now-ms) 60000))
         access
+      (unless refresh
+        (error "Qwen refresh token missing — re-run M-x copilot-agent-qwen-login"))
       (cdr (assq 'access_token (copilot-agent-qwen--refresh-token refresh))))))
 
 ;;; ---------- Device OAuth Login ----------

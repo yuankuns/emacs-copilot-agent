@@ -256,45 +256,84 @@
 
 ;;; ---------- API multi-message dispatch in core ----------
 
+(ert-deftest qwen/dispatch-list-of-messages ()
+  "The dispatch predicate (symbolp (caar result)) must correctly identify a list
+of messages: (caar list-of-msgs) is a cons cell, not a symbol."
+  ;; list-of-messages: (((role . "tool") ...) ((role . "tool") ...))
+  ;; (caar ...) = (car (car ...)) = (car ((role . "tool") ...)) = (role . "tool") = cons
+  (let ((list-of-msgs (list '((role . "tool") (tool_call_id . "c1") (content . "r1"))
+                            '((role . "tool") (tool_call_id . "c2") (content . "r2")))))
+    (should-not (symbolp (caar list-of-msgs)))))
+
+(ert-deftest qwen/dispatch-single-message ()
+  "The dispatch predicate (symbolp (caar result)) must correctly identify a single
+message alist: (caar single-msg) is the symbol 'role."
+  ;; single message: ((role . "user") (content . ...))
+  ;; (caar ...) = (car (car ...)) = (car (role . "user")) = role = symbol
+  (let ((single-msg '((role . "user") (content . "text"))))
+    (should (symbolp (caar single-msg)))))
+
 (ert-deftest qwen/process-tools-appends-list-of-messages ()
-  "copilot-agent-api--process-tools must append multiple messages when
-make-tool-result-fn returns a list (OpenAI-style tool results)."
+  "The dispatch in copilot-agent-api--process-tools appends N messages when
+make-tool-result-fn returns a list of N alists (OpenAI-style tool results)."
   (require 'copilot-agent-api)
-  ;; Build a minimal session with a mock provider
-  (let* ((session (list :provider 'test-qwen-mock
+  (let* ((session (list :provider 'test-qwen-dispatch
                         :messages '()
                         :tools    nil
-                        :approve  'all))
-         (results-seen nil))
-    ;; Register a mock provider
+                        :approve  'all)))
     (copilot-agent-api-register-provider
-     'test-qwen-mock
-     (list :display-name     "mock"
-           :send-fn          (lambda (_s _cb) nil)
-           :format-tools-fn  #'identity
+     'test-qwen-dispatch
+     (list :display-name        "mock-list"
+           :send-fn             (lambda (_s _cb) nil)
+           :format-tools-fn     #'identity
            :make-tool-result-fn
            (lambda (results)
-             ;; Return a LIST of messages (OpenAI style)
              (mapcar (lambda (r)
-                       `((role         . "tool")
+                       `((role . "tool")
                          (tool_call_id . ,(plist-get r :tool-use-id))
                          (content      . ,(plist-get r :content))))
                      results))))
-    ;; Directly call the internal append logic used by process-tools
+    ;; Run the actual dispatch logic
     (let ((msg-or-list
-           (funcall
-            (plist-get (copilot-agent-api--get-provider 'test-qwen-mock)
-                       :make-tool-result-fn)
-            (list (list :tool-use-id "c1" :content "r1")
-                  (list :tool-use-id "c2" :content "r2")))))
-      (if (and msg-or-list (listp (car msg-or-list)))
-          (dolist (m msg-or-list)
-            (copilot-agent-api--append-message session m))
-        (copilot-agent-api--append-message session msg-or-list)))
-    ;; Two tool messages should have been appended
+           (funcall (plist-get (copilot-agent-api--get-provider 'test-qwen-dispatch)
+                               :make-tool-result-fn)
+                    (list (list :tool-use-id "c1" :content "r1")
+                          (list :tool-use-id "c2" :content "r2")))))
+      (if (symbolp (caar msg-or-list))
+          (copilot-agent-api--append-message session msg-or-list)
+        (dolist (m msg-or-list)
+          (copilot-agent-api--append-message session m))))
     (should (= (length (plist-get session :messages)) 2))
     (should (equal (cdr (assq 'role (nth 0 (plist-get session :messages)))) "tool"))
     (should (equal (cdr (assq 'role (nth 1 (plist-get session :messages)))) "tool"))))
+
+(ert-deftest qwen/process-tools-appends-single-message ()
+  "The dispatch must append exactly one message when make-tool-result-fn returns
+a single alist (Anthropic/Gemini style)."
+  (require 'copilot-agent-api)
+  (let* ((session (list :provider 'test-single-dispatch
+                        :messages '()
+                        :tools    nil
+                        :approve  'all)))
+    (copilot-agent-api-register-provider
+     'test-single-dispatch
+     (list :display-name        "mock-single"
+           :send-fn             (lambda (_s _cb) nil)
+           :format-tools-fn     #'identity
+           :make-tool-result-fn
+           (lambda (_results)
+             ;; Returns a SINGLE message (Anthropic/Gemini style)
+             '((role . "user") (content . "tool result")))))
+    (let ((msg-or-list
+           (funcall (plist-get (copilot-agent-api--get-provider 'test-single-dispatch)
+                               :make-tool-result-fn)
+                    (list (list :tool-use-id "x" :content "out")))))
+      (if (symbolp (caar msg-or-list))
+          (copilot-agent-api--append-message session msg-or-list)
+        (dolist (m msg-or-list)
+          (copilot-agent-api--append-message session m))))
+    (should (= (length (plist-get session :messages)) 1))
+    (should (equal (cdr (assq 'role (nth 0 (plist-get session :messages)))) "user"))))
 
 (provide 'test-copilot-agent-qwen)
 ;;; test-copilot-agent-qwen.el ends here
