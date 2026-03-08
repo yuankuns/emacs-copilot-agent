@@ -307,5 +307,130 @@
     (should (string-match-p "gemini-2.0-flash" url))
     (should (string-match-p "generateContent" url))))
 
+;;; ---------- CLI Auth — PKCE ----------
+
+(ert-deftest gemini-cli/pkce-verifier-length ()
+  "PKCE verifier is a non-empty base64url string."
+  (let ((pkce (copilot-agent-gemini--pkce)))
+    (should (stringp (car pkce)))
+    (should (> (length (car pkce)) 0))))
+
+(ert-deftest gemini-cli/pkce-challenge-no-padding ()
+  "PKCE S256 challenge must not contain base64 padding '='."
+  (let ((challenge (cdr (copilot-agent-gemini--pkce))))
+    (should-not (string-match-p "=" challenge))))
+
+(ert-deftest gemini-cli/pkce-challenge-no-plus-slash ()
+  "PKCE challenge uses base64url alphabet (no '+' or '/')."
+  (let ((challenge (cdr (copilot-agent-gemini--pkce))))
+    (should-not (string-match-p "[+/]" challenge))))
+
+(ert-deftest gemini-cli/pkce-pairs-differ ()
+  "Each PKCE call produces a fresh unique pair."
+  (let ((a (copilot-agent-gemini--pkce))
+        (b (copilot-agent-gemini--pkce)))
+    (should-not (equal (car a) (car b)))))
+
+;;; ---------- CLI Auth — Credential Storage ----------
+
+(ert-deftest gemini-cli/save-and-load-creds ()
+  "save-creds writes a JSON file; load-creds reads it back."
+  (let* ((tmp-dir  (make-temp-file "gemini-test-creds" t))
+         (tmp-file (expand-file-name "gemini_oauth_creds.json" tmp-dir))
+         (copilot-agent-gemini--cli-creds-file tmp-file))
+    (unwind-protect
+        (progn
+          (copilot-agent-gemini--cli-save-creds "tok123" "ref456" 9999999)
+          (let ((creds (copilot-agent-gemini--cli-load-creds)))
+            (should (equal (cdr (assq 'access_token  creds)) "tok123"))
+            (should (equal (cdr (assq 'refresh_token creds)) "ref456"))
+            (should (equal (cdr (assq 'expires       creds)) 9999999))))
+      (delete-directory tmp-dir t))))
+
+(ert-deftest gemini-cli/load-creds-returns-nil-when-missing ()
+  "load-creds returns nil when the credentials file does not exist."
+  (let ((copilot-agent-gemini--cli-creds-file "/nonexistent/path/creds.json"))
+    (should (null (copilot-agent-gemini--cli-load-creds)))))
+
+(ert-deftest gemini-cli/creds-file-mode-600 ()
+  "save-creds sets file permissions to 0600."
+  (let* ((tmp-dir  (make-temp-file "gemini-test-mode" t))
+         (tmp-file (expand-file-name "gemini_oauth_creds.json" tmp-dir))
+         (copilot-agent-gemini--cli-creds-file tmp-file))
+    (unwind-protect
+        (progn
+          (copilot-agent-gemini--cli-save-creds "a" "b" 1)
+          (should (= (logand (file-modes tmp-file) #o777) #o600)))
+      (delete-directory tmp-dir t))))
+
+;;; ---------- CLI Auth — Valid Token ----------
+
+(ert-deftest gemini-cli/valid-token-returns-when-fresh ()
+  "valid-access-token returns access token when not expired."
+  (let* ((tmp-dir  (make-temp-file "gemini-test-tok" t))
+         (tmp-file (expand-file-name "gemini_oauth_creds.json" tmp-dir))
+         (copilot-agent-gemini--cli-creds-file tmp-file)
+         ;; expires 1 hour from now
+         (future-ms (+ (truncate (* (float-time) 1000)) 3600000)))
+    (unwind-protect
+        (progn
+          (copilot-agent-gemini--cli-save-creds "access-ok" "ref" future-ms)
+          (should (equal (copilot-agent-gemini--cli-valid-access-token) "access-ok")))
+      (delete-directory tmp-dir t))))
+
+(ert-deftest gemini-cli/valid-token-errors-when-no-creds ()
+  "valid-access-token signals an error when no credentials exist."
+  (let ((copilot-agent-gemini--cli-creds-file "/no/such/file.json"))
+    (should-error (copilot-agent-gemini--cli-valid-access-token))))
+
+;;; ---------- CLI Auth — Client Extraction ----------
+
+(ert-deftest gemini-cli/extract-client-id-from-oauth2-js ()
+  "cli-oauth-creds extracts client_id from a synthetic oauth2.js file."
+  (let* ((tmp-dir  (make-temp-file "gemini-test-oauth2" t))
+         (fake-js  (expand-file-name "oauth2.js" tmp-dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file fake-js
+            (insert "const OAUTH_CLIENT_ID = '123456789012-abcdefghij.apps.googleusercontent.com';\n")
+            (insert "const OAUTH_CLIENT_SECRET = 'GOCSPX-FakeSecretValue123';\n"))
+          ;; Stub find-cli-oauth2-js to return our fake file
+          (cl-letf (((symbol-function 'copilot-agent-gemini--find-cli-oauth2-js)
+                     (lambda () fake-js)))
+            (let ((creds (copilot-agent-gemini--cli-oauth-creds)))
+              (should (string-match-p "googleusercontent\\.com" (car creds)))
+              (should (string-match-p "GOCSPX-" (cdr creds))))))
+      (delete-directory tmp-dir t))))
+
+(ert-deftest gemini-cli/extract-errors-when-cli-not-found ()
+  "cli-oauth-creds signals an error when find-cli-oauth2-js returns nil."
+  (cl-letf (((symbol-function 'copilot-agent-gemini--find-cli-oauth2-js)
+             (lambda () nil)))
+    (should-error (copilot-agent-gemini--cli-oauth-creds))))
+
+;;; ---------- CLI Auth — Auth Mode Dispatch ----------
+
+(ert-deftest gemini-cli/send-dispatches-to-api-key-mode ()
+  "gemini-send calls --send-api-key when auth-mode is api-key."
+  (let ((copilot-agent-gemini-auth-mode 'api-key)
+        called)
+    (cl-letf (((symbol-function 'copilot-agent-gemini--send-api-key)
+               (lambda (_s _cb) (setq called t)))
+              ((symbol-function 'copilot-agent-gemini--send-cli)
+               (lambda (_s _cb) (error "should not be called"))))
+      (copilot-agent-gemini-send '(:model "x") #'ignore)
+      (should called))))
+
+(ert-deftest gemini-cli/send-dispatches-to-cli-mode ()
+  "gemini-send calls --send-cli when auth-mode is cli."
+  (let ((copilot-agent-gemini-auth-mode 'cli)
+        called)
+    (cl-letf (((symbol-function 'copilot-agent-gemini--send-cli)
+               (lambda (_s _cb) (setq called t)))
+              ((symbol-function 'copilot-agent-gemini--send-api-key)
+               (lambda (_s _cb) (error "should not be called"))))
+      (copilot-agent-gemini-send '(:model "x") #'ignore)
+      (should called))))
+
 (provide 'test-copilot-agent-gemini)
 ;;; test-copilot-agent-gemini.el ends here
