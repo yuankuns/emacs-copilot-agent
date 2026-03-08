@@ -3,7 +3,7 @@
 ;;; Commentary:
 ;; Provider for Alibaba's Qwen models via the free-tier portal OAuth flow.
 ;; No API key required — authenticate once with your Qwen account and tokens
-;; are stored in ~/.qwen/oauth_creds.json (compatible with the Qwen Code CLI).
+;; are stored in ~/.emacs-copilot-agent/qwen_oauth_creds.json.
 ;;
 ;; Auth flow (OAuth 2.0 Device Authorization Grant + PKCE):
 ;;   M-x copilot-agent-qwen-login
@@ -29,7 +29,9 @@
 (defconst copilot-agent-qwen--client-id     "f0304373b74a44d2b584a3fb70ca9e56")
 (defconst copilot-agent-qwen--scope         "openid profile email model.completion")
 (defconst copilot-agent-qwen--api-base      "https://portal.qwen.ai/v1")
-(defconst copilot-agent-qwen--creds-file    (expand-file-name "~/.qwen/oauth_creds.json"))
+(defconst copilot-agent-qwen--creds-file
+  (expand-file-name "~/.emacs-copilot-agent/qwen_oauth_creds.json")
+  "Path where Qwen OAuth tokens are stored.")
 
 ;;; ---------- Customisation ----------
 
@@ -94,7 +96,7 @@ Returns parsed JSON alist or signals an error."
 ;;; ---------- Credential Storage ----------
 
 (defun copilot-agent-qwen--save-creds (access refresh expires)
-  "Write ACCESS, REFRESH tokens and EXPIRES (ms) to ~/.qwen/oauth_creds.json."
+  "Write ACCESS, REFRESH tokens and EXPIRES (ms) to the credentials file."
   (make-directory (file-name-directory copilot-agent-qwen--creds-file) t)
   (with-temp-file copilot-agent-qwen--creds-file
     (insert (json-encode `((access_token  . ,access)
@@ -103,7 +105,7 @@ Returns parsed JSON alist or signals an error."
   (set-file-modes copilot-agent-qwen--creds-file #o600))
 
 (defun copilot-agent-qwen--load-creds ()
-  "Load credentials from ~/.qwen/oauth_creds.json.
+  "Load credentials from the credentials file.
 Returns alist with keys access_token, refresh_token, expires (ms), or nil."
   (when (file-exists-p copilot-agent-qwen--creds-file)
     (condition-case _
@@ -157,7 +159,7 @@ Signals an error if no credentials exist (run M-x copilot-agent-qwen-login)."
 (defun copilot-agent-qwen-login ()
   "Authenticate with Qwen using the device-code OAuth flow (free tier).
 Opens a browser URL; enter the displayed code to approve access.
-Tokens are saved to ~/.qwen/oauth_creds.json."
+Tokens are saved to ~/.emacs-copilot-agent/qwen_oauth_creds.json."
   (interactive)
   (let* ((pkce      (copilot-agent-qwen--pkce))
          (verifier  (car pkce))
