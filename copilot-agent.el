@@ -41,8 +41,9 @@
 
 (defcustom copilot-agent-provider 'anthropic
   "Default LLM provider symbol.  Must be a registered provider."
-  :type '(choice (const :tag "Anthropic Claude" anthropic)
-                 (const :tag "Google Gemini"    gemini)
+  :type '(choice (const :tag "Anthropic Claude"       anthropic)
+                 (const :tag "Google Gemini"          gemini)
+                 (const :tag "Alibaba Qwen (free)"    qwen)
                  (symbol :tag "Other"))
   :group 'copilot-agent)
 
@@ -236,7 +237,8 @@ commands target the right directory (including remote SSH via TRAMP)."
   "Load all bundled providers."
   (let ((dir (file-name-directory (or load-file-name buffer-file-name))))
     (load (expand-file-name "providers/copilot-agent-anthropic" dir) t)
-    (load (expand-file-name "providers/copilot-agent-gemini"    dir) t)))
+    (load (expand-file-name "providers/copilot-agent-gemini"    dir) t)
+    (load (expand-file-name "providers/copilot-agent-qwen"      dir) t)))
 
 (copilot-agent-load-providers)
 
