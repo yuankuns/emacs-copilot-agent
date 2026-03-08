@@ -445,6 +445,38 @@
   (should (equal copilot-agent-gemini--oauth-code "TEST_CODE_ABC"))
   (setq copilot-agent-gemini--oauth-code nil))
 
+;;; ---------- CLI Auth — Code Assist Request/Response ----------
+
+(ert-deftest gemini-cli/save-and-load-project-id ()
+  "save-creds persists project ID; load-creds reads it back."
+  (let* ((tmp-dir  (make-temp-file "gemini-test-proj" t))
+         (tmp-file (expand-file-name "gemini_oauth_creds.json" tmp-dir))
+         (copilot-agent-gemini--cli-creds-file tmp-file))
+    (unwind-protect
+        (progn
+          (copilot-agent-gemini--cli-save-creds "tok" "ref" 9999 "my-project-123")
+          (let ((creds (copilot-agent-gemini--cli-load-creds)))
+            (should (equal (cdr (assq 'project creds)) "my-project-123"))))
+      (delete-directory tmp-dir t))))
+
+(ert-deftest gemini-cli/send-cli-errors-without-project ()
+  "send-cli calls callback with error when no project ID is saved."
+  (let* ((tmp-dir  (make-temp-file "gemini-test-noproj" t))
+         (tmp-file (expand-file-name "gemini_oauth_creds.json" tmp-dir))
+         (copilot-agent-gemini--cli-creds-file tmp-file)
+         err-msg)
+    (unwind-protect
+        (progn
+          ;; Save creds WITHOUT a project field
+          (copilot-agent-gemini--cli-save-creds "tok" "ref" 99999999999)
+          (copilot-agent-gemini--send-cli
+           (list :model "gemini-2.0-flash" :messages '() :tools nil
+                 :system-prompt nil :max-tokens 512)
+           (lambda (_resp err) (setq err-msg err)))
+          (should (stringp err-msg))
+          (should (string-match-p "project" err-msg)))
+      (delete-directory tmp-dir t))))
+
 ;;; ---------- CLI Auth — Auth Mode Dispatch ----------
 
 (ert-deftest gemini-cli/send-dispatches-to-api-key-mode ()
