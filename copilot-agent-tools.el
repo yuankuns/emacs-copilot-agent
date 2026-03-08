@@ -171,8 +171,24 @@ Absolute and TRAMP paths pass through unchanged."
   (let* ((path    (copilot-agent-tools--resolve (cdr (assq 'path args))))
          (content (cdr (assq 'content args))))
     (make-directory (file-name-directory path) t)
-    (with-temp-file path
-      (insert content))
+    ;; Use find-file-noselect so that:
+    ;; 1. If the file is already open in a buffer, that buffer is updated in-place
+    ;;    and the change is immediately visible to the user without a manual revert.
+    ;; 2. erase-buffer + insert inside atomic-change-group makes the entire agent
+    ;;    write a single undo entry — C-/ once reverts the whole change.
+    ;; 3. Works transparently for TRAMP remote paths (find-file-noselect is TRAMP-aware).
+    (let ((buf (find-file-noselect path)))
+      (with-current-buffer buf
+        (let ((inhibit-read-only t))
+          ;; with-undo-amalgamate groups erase+insert into one undo entry so
+          ;; the user can revert the entire agent edit with a single C-/.
+          (with-undo-amalgamate
+            (erase-buffer)
+            (insert content)))
+        ;; require-final-newline nil: write exactly what the agent produced;
+        ;; do not let Emacs silently append a newline.
+        (let ((require-final-newline nil))
+          (save-buffer))))
     (format "Wrote %d bytes to %s" (length content) path)))
 
 (defun copilot-agent-tools--list-dir (args)

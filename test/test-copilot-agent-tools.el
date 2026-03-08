@@ -195,6 +195,47 @@ The directory is deleted after BODY completes."
       (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
                      "new")))))
 
+(ert-deftest tools/write-file-updates-open-buffer ()
+  "write_file must update a buffer that already has the file open.
+The user should see the new content immediately without a manual revert."
+  (with-temp-dir
+    (let* ((path (expand-file-name "live.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      ;; Open the file in a buffer first (simulates user having it open)
+      (write-region "original" nil path)
+      (let ((buf (find-file-noselect path)))
+        (unwind-protect
+            (progn
+              ;; Agent writes new content
+              (copilot-agent-tools--write-file
+               `((path . ,path) (content . "updated by agent")))
+              ;; The already-open buffer must reflect the new content
+              (with-current-buffer buf
+                (should (equal (buffer-string) "updated by agent"))))
+          (kill-buffer buf))))))
+
+(ert-deftest tools/write-file-is-undoable ()
+  "write_file must record changes in the buffer's undo list so the user can
+revert them interactively.  We verify buffer-undo-list directly rather than
+calling (undo) because the interactive undo function behaves differently in
+batch mode vs an interactive Emacs session."
+  (with-temp-dir
+    (let* ((path (expand-file-name "undo.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "original" nil path)
+      (let ((buf (find-file-noselect path)))
+        (unwind-protect
+            (progn
+              (copilot-agent-tools--write-file
+               `((path . ,path) (content . "agent wrote this")))
+              (with-current-buffer buf
+                ;; buffer-undo-list must be a non-empty list:
+                ;;   - not t  (which means undo is disabled)
+                ;;   - not nil (which means no history recorded)
+                (should (listp buffer-undo-list))
+                (should (consp buffer-undo-list))))
+          (kill-buffer buf))))))
+
 ;;; ---------- list_directory ----------
 
 (ert-deftest tools/list-dir-shows-files ()
