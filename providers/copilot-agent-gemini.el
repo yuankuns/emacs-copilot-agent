@@ -302,21 +302,77 @@ Returns parsed JSON alist or signals an error."
           (json-read))
       (when (buffer-live-p buf) (kill-buffer buf)))))
 
-;;; ---------- CLI Auth — Project ID ----------
+;;; ---------- CLI Auth — Project ID / User Setup ----------
+
+(defconst copilot-agent-gemini--core-metadata
+  '((ideType    . "IDE_UNSPECIFIED")
+    (platform   . "PLATFORM_UNSPECIFIED")
+    (pluginType . "GEMINI")))
+
+(defun copilot-agent-gemini--json-get-sync (url token)
+  "GET URL with Bearer TOKEN synchronously.  Returns parsed JSON alist."
+  (let* ((url-request-method "GET")
+         (url-request-extra-headers
+          `(("Authorization" . ,(concat "Bearer " token))))
+         (buf (url-retrieve-synchronously url t t 30)))
+    (unless buf (error "Gemini: no response from %s" url))
+    (unwind-protect
+        (with-current-buffer buf
+          (goto-char (point-min))
+          (re-search-forward "^\r?$" nil t)
+          (json-read))
+      (when (buffer-live-p buf) (kill-buffer buf)))))
 
 (defun copilot-agent-gemini--cli-fetch-project (token)
-  "Call loadCodeAssist with TOKEN to obtain the free-tier project ID.
-Returns the project ID string or signals an error."
-  (let* ((result  (copilot-agent-gemini--json-post-sync
-                   (concat copilot-agent-gemini--code-assist-url ":loadCodeAssist")
-                   token
-                   '((metadata . ((ideType    . "IDE_UNSPECIFIED")
-                                  (platform   . "PLATFORM_UNSPECIFIED")
-                                  (pluginType . "GEMINI"))))))
-         (project (cdr (assq 'cloudaicompanionProject result))))
-    (unless project
-      (error "Gemini loadCodeAssist returned no project: %s" (json-encode result)))
-    project))
+  "Perform the full Code Assist user-setup flow with TOKEN.
+Calls loadCodeAssist; if already onboarded returns the project ID.
+Otherwise calls onboardUser (prompting for a GCP project ID if the
+account tier requires one), polls any async operation to completion,
+and returns the resulting project ID string."
+  (let* ((load-res (copilot-agent-gemini--json-post-sync
+                    (concat copilot-agent-gemini--code-assist-url ":loadCodeAssist")
+                    token
+                    `((metadata . ,copilot-agent-gemini--core-metadata))))
+         (project  (cdr (assq 'cloudaicompanionProject load-res))))
+    (if project
+        project   ; already fully onboarded
+      ;; Need to onboard: pick the default allowedTier
+      (let* ((tiers        (append (cdr (assq 'allowedTiers load-res)) nil))
+             (default-tier (or (seq-find (lambda (t) (cdr (assq 'isDefault t))) tiers)
+                               (error "Gemini: no allowed tiers in loadCodeAssist response")))
+             (tier-id      (cdr (assq 'id default-tier)))
+             (needs-proj   (eq t (cdr (assq 'userDefinedCloudaicompanionProject default-tier))))
+             (gcp-proj     (when needs-proj
+                             (read-string
+                              (format "Gemini tier '%s' requires a GCP project ID: " tier-id))))
+             (onboard-body (if (and needs-proj gcp-proj (not (string-empty-p gcp-proj)))
+                               `((tierId                    . ,tier-id)
+                                 (cloudaicompanionProject   . ,gcp-proj)
+                                 (metadata . ((ideType    . "IDE_UNSPECIFIED")
+                                              (platform   . "PLATFORM_UNSPECIFIED")
+                                              (pluginType . "GEMINI")
+                                              (duetProject . ,gcp-proj))))
+                             `((tierId   . ,tier-id)
+                               (metadata . ,copilot-agent-gemini--core-metadata))))
+             (onboard-res  (copilot-agent-gemini--json-post-sync
+                            (concat copilot-agent-gemini--code-assist-url ":onboardUser")
+                            token onboard-body)))
+        ;; Poll LRO if not done immediately
+        (when (and (not (cdr (assq 'done onboard-res)))
+                   (cdr (assq 'name onboard-res)))
+          (let ((op-name (cdr (assq 'name onboard-res))))
+            (message "Gemini: waiting for account setup...")
+            (while (not (cdr (assq 'done onboard-res)))
+              (sit-for 3)
+              (setq onboard-res
+                    (copilot-agent-gemini--json-get-sync
+                     (concat copilot-agent-gemini--code-assist-url "/" op-name)
+                     token)))))
+        ;; Extract project from final response
+        (or (cdr (assq 'cloudaicompanionProject onboard-res))
+            (let ((resp (cdr (assq 'response onboard-res))))
+              (and resp (cdr (assq 'id (cdr (assq 'cloudaicompanionProject resp))))))
+            (error "Gemini onboarding failed: %s" (json-encode onboard-res)))))))
 
 ;;;###autoload
 (defun copilot-agent-gemini-login ()
