@@ -408,6 +408,43 @@
              (lambda () nil)))
     (should-error (copilot-agent-gemini--cli-oauth-creds))))
 
+;;; ---------- CLI Auth — Callback Server ----------
+
+(ert-deftest gemini-cli/start-callback-server-returns-port ()
+  "start-callback-server starts a TCP server and returns a positive port number."
+  (let ((port (copilot-agent-gemini--start-callback-server)))
+    (unwind-protect
+        (progn
+          (should (integerp port))
+          (should (> port 0)))
+      (when (process-live-p copilot-agent-gemini--oauth-server)
+        (delete-process copilot-agent-gemini--oauth-server))
+      (setq copilot-agent-gemini--oauth-server nil
+            copilot-agent-gemini--oauth-code   nil))))
+
+(ert-deftest gemini-cli/callback-server-no-nowait-incompatibility ()
+  "start-callback-server must not pass :nowait to make-network-process (incompatible with :server)."
+  ;; If :nowait were present the call would signal an error; verify it succeeds.
+  (let (err)
+    (condition-case e
+        (let ((port (copilot-agent-gemini--start-callback-server)))
+          (when (process-live-p copilot-agent-gemini--oauth-server)
+            (delete-process copilot-agent-gemini--oauth-server))
+          (setq copilot-agent-gemini--oauth-server nil
+                copilot-agent-gemini--oauth-code   nil))
+      (error (setq err e)))
+    (should-not err)))
+
+(ert-deftest gemini-cli/oauth-filter-extracts-code ()
+  "oauth-filter sets copilot-agent-gemini--oauth-code from an HTTP GET request string."
+  (setq copilot-agent-gemini--oauth-code nil)
+  (cl-letf (((symbol-function 'process-send-string) #'ignore)
+            ((symbol-function 'run-at-time)          #'ignore))
+    (copilot-agent-gemini--oauth-filter nil
+     "GET /oauth2callback?code=TEST_CODE_ABC&state=xyz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"))
+  (should (equal copilot-agent-gemini--oauth-code "TEST_CODE_ABC"))
+  (setq copilot-agent-gemini--oauth-code nil))
+
 ;;; ---------- CLI Auth — Auth Mode Dispatch ----------
 
 (ert-deftest gemini-cli/send-dispatches-to-api-key-mode ()

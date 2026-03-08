@@ -201,8 +201,7 @@ Returns the assigned port number."
                  :service  0
                  :family   'ipv4
                  :filter   #'copilot-agent-gemini--oauth-filter
-                 :sentinel #'ignore
-                 :nowait   t)))
+                 :sentinel #'ignore)))
     (setq copilot-agent-gemini--oauth-server server)
     (cadr (process-contact server))))
 
