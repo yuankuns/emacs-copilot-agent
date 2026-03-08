@@ -3,21 +3,31 @@
 ;;; Commentary:
 ;; Implements the copilot-agent provider protocol for Google Gemini.
 ;;
-;; Auth-source setup (~/.authinfo or ~/.authinfo.gpg):
-;;   machine generativelanguage.googleapis.com login apikey password YOUR_KEY
+;; Two authentication modes, selected by `copilot-agent-gemini-auth-mode':
 ;;
-;; Gemini differs from Anthropic in several ways handled here:
+;;   api-key (default) — API key from auth-source:
+;;     machine generativelanguage.googleapis.com login apikey password YOUR_KEY
+;;
+;;   cli — OAuth via the installed Gemini CLI (no API key needed):
+;;     1. Install Gemini CLI:  brew install gemini-cli  (or npm -g @google/gemini-cli)
+;;     2. M-x copilot-agent-gemini-login
+;;     Tokens are saved to ~/.emacs-copilot-agent/gemini_oauth_creds.json.
+;;     The client_id / client_secret are read from the installed Gemini CLI's
+;;     own oauth2.js bundle, so no separate Google Cloud project is needed.
+;;
+;; Gemini API differences from Anthropic handled here:
 ;;   - Role names: "user" / "model"  (not "user" / "assistant")
 ;;   - Content format: {role, parts:[{text}]}  (not {role, content})
 ;;   - Tool calls:  parts:[{functionCall:{name,args}}]
 ;;   - Tool results: parts:[{functionResponse:{name,response:{result}}}]
 ;;   - Tool schema types: UPPERCASE  ("STRING" not "string")
-;;   - API key passed as query param, not header
+;;   - api-key mode: key passed as query param; cli mode: Authorization: Bearer
 
 ;;; Code:
 
 (require 'auth-source)
 (require 'json)
+(require 'url)
 (require 'copilot-agent-api nil t)
 
 ;;; ---------- Configuration ----------
@@ -27,11 +37,20 @@
   :type 'string
   :group 'copilot-agent)
 
+(defcustom copilot-agent-gemini-auth-mode 'api-key
+  "Authentication mode for the Gemini provider.
+`api-key' — use an API key from auth-source (existing behaviour).
+`cli'      — use OAuth via the installed Gemini CLI; run
+             M-x copilot-agent-gemini-login once to authenticate."
+  :type '(choice (const :tag "API key (auth-source)" api-key)
+                 (const :tag "Gemini CLI OAuth"       cli))
+  :group 'copilot-agent)
+
 (defconst copilot-agent-gemini--base-url
   "https://generativelanguage.googleapis.com/v1beta/models"
-  "Gemini API base URL.")
+  "Gemini API base URL (used by both auth modes).")
 
-;;; ---------- Auth ----------
+;;; ---------- API-key Auth ----------
 
 (defun copilot-agent-gemini--api-key ()
   "Retrieve the Gemini API key from auth-source.
@@ -47,6 +66,377 @@ Add to ~/.authinfo:
 (defun copilot-agent-gemini--endpoint (model)
   "Return the generateContent endpoint URL for MODEL."
   (format "%s/%s:generateContent" copilot-agent-gemini--base-url model))
+
+;;; ---------- CLI Auth — PKCE ----------
+
+(defun copilot-agent-gemini--base64url (s)
+  "Base64url-encode unibyte string S without padding."
+  (replace-regexp-in-string
+   "=" ""
+   (replace-regexp-in-string
+    "/" "_"
+    (replace-regexp-in-string "+" "-" (base64-encode-string s t)))))
+
+(defun copilot-agent-gemini--random-bytes (n)
+  "Return N cryptographically random bytes as a unibyte string."
+  (if (fboundp 'gnutls-random)
+      (gnutls-random n)
+    (apply #'unibyte-string (mapcar (lambda (_) (random 256)) (make-list n nil)))))
+
+(defun copilot-agent-gemini--pkce ()
+  "Return (VERIFIER . CHALLENGE) for PKCE-S256."
+  (let* ((raw      (copilot-agent-gemini--random-bytes 32))
+         (verifier  (copilot-agent-gemini--base64url raw))
+         (hash      (secure-hash 'sha256 verifier nil nil t))
+         (challenge (copilot-agent-gemini--base64url hash)))
+    (cons verifier challenge)))
+
+;;; ---------- CLI Auth — Synchronous HTTP Form POST ----------
+
+(defun copilot-agent-gemini--post-form (url params)
+  "POST URL-encoded PARAMS alist to URL synchronously.
+Returns parsed JSON alist or signals an error."
+  (let* ((body (mapconcat
+                (lambda (p)
+                  (concat (url-hexify-string (car p)) "=" (url-hexify-string (cdr p))))
+                params "&"))
+         (url-request-method "POST")
+         (url-request-extra-headers
+          '(("Content-Type" . "application/x-www-form-urlencoded")
+            ("Accept"       . "application/json")))
+         (url-request-data (encode-coding-string body 'utf-8))
+         (buf (url-retrieve-synchronously url t t 30)))
+    (unless buf
+      (error "Gemini: network error — no response from %s" url))
+    (unwind-protect
+        (with-current-buffer buf
+          (goto-char (point-min))
+          (re-search-forward "^\r?$" nil t)
+          (json-read))
+      (when (buffer-live-p buf) (kill-buffer buf)))))
+
+;;; ---------- CLI Auth — Find Gemini CLI credentials ----------
+
+(defun copilot-agent-gemini--find-cli-oauth2-js ()
+  "Return path to the Gemini CLI's oauth2.js file, or nil if not found.
+Resolves the real path of the `gemini' binary and walks up the directory
+tree to find node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js."
+  (let* ((bin  (executable-find "gemini"))
+         (real (and bin (file-truename bin)))
+         (dir  (and real (file-name-directory real)))
+         found)
+    (when dir
+      (let ((current dir))
+        (dotimes (_ 10)
+          (unless found
+            (let ((candidate
+                   (expand-file-name
+                    "node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js"
+                    current)))
+              (if (file-exists-p candidate)
+                  (setq found candidate)
+                (setq current
+                      (file-name-directory (directory-file-name current)))))))))
+    found))
+
+(defun copilot-agent-gemini--cli-oauth-creds ()
+  "Return (CLIENT-ID . CLIENT-SECRET) extracted from the installed Gemini CLI.
+Signals an error if the Gemini CLI is not found or the credentials cannot
+be parsed."
+  (let ((oauth2-js (copilot-agent-gemini--find-cli-oauth2-js)))
+    (unless oauth2-js
+      (error (concat "Gemini CLI not found.  Install with:\n"
+                     "  brew install gemini-cli\n"
+                     "or: npm install -g @google/gemini-cli")))
+    (let* ((content  (with-temp-buffer
+                       (insert-file-contents oauth2-js)
+                       (buffer-string)))
+           (id-match  (and (string-match
+                            (concat "\\([0-9]\\{10,\\}-[a-z0-9]+"
+                                    "\\.apps\\.googleusercontent\\.com\\)")
+                            content)
+                           (match-string 1 content)))
+           (sec-match (and (string-match "\\(GOCSPX-[A-Za-z0-9_-]+\\)" content)
+                           (match-string 1 content))))
+      (unless (and id-match sec-match)
+        (error "Could not extract OAuth credentials from Gemini CLI's oauth2.js"))
+      (cons id-match sec-match))))
+
+;;; ---------- CLI Auth — Local Callback Server ----------
+
+(defvar copilot-agent-gemini--oauth-code nil
+  "Authorization code received from the OAuth callback.")
+
+(defvar copilot-agent-gemini--oauth-server nil
+  "TCP server process listening for the OAuth redirect.")
+
+(defun copilot-agent-gemini--oauth-filter (proc string)
+  "Handle incoming HTTP data on PROC; extract OAuth code from STRING."
+  (when (string-match "[?&]code=\\([^& \t\r\n]+\\)" string)
+    (setq copilot-agent-gemini--oauth-code (match-string 1 string))
+    (process-send-string
+     proc
+     (concat "HTTP/1.1 200 OK\r\n"
+             "Content-Type: text/html\r\n"
+             "Connection: close\r\n\r\n"
+             "<html><body>"
+             "<h2>Gemini login successful.</h2>"
+             "<p>You may close this tab and return to Emacs.</p>"
+             "</body></html>"))
+    (run-at-time 0.5 nil
+                 (lambda ()
+                   (ignore-errors (delete-process proc))
+                   (when (process-live-p copilot-agent-gemini--oauth-server)
+                     (delete-process copilot-agent-gemini--oauth-server))
+                   (setq copilot-agent-gemini--oauth-server nil)))))
+
+(defun copilot-agent-gemini--start-callback-server ()
+  "Start a localhost HTTP server to capture the OAuth callback.
+Returns the assigned port number."
+  (setq copilot-agent-gemini--oauth-code nil)
+  (let ((server (make-network-process
+                 :name     "copilot-gemini-oauth-cb"
+                 :server   t
+                 :host     "127.0.0.1"
+                 :service  0
+                 :family   'ipv4
+                 :filter   #'copilot-agent-gemini--oauth-filter
+                 :sentinel #'ignore)))
+    (setq copilot-agent-gemini--oauth-server server)
+    (cadr (process-contact server))))
+
+;;; ---------- CLI Auth — Credential Storage ----------
+
+(defconst copilot-agent-gemini--cli-creds-file
+  (expand-file-name "~/.emacs-copilot-agent/gemini_oauth_creds.json")
+  "Path where Gemini CLI OAuth tokens are stored.")
+
+(defun copilot-agent-gemini--cli-save-creds (access refresh expires &optional project)
+  "Save ACCESS, REFRESH tokens, EXPIRES (ms) and optional PROJECT ID to the credentials file."
+  (make-directory (file-name-directory copilot-agent-gemini--cli-creds-file) t)
+  (with-temp-file copilot-agent-gemini--cli-creds-file
+    (insert (json-encode `((access_token  . ,access)
+                           (refresh_token . ,refresh)
+                           (expires       . ,expires)
+                           ,@(when project `((project . ,project)))))))
+  (set-file-modes copilot-agent-gemini--cli-creds-file #o600))
+
+(defun copilot-agent-gemini--cli-load-creds ()
+  "Load credentials from the credentials file.  Returns alist or nil."
+  (when (file-exists-p copilot-agent-gemini--cli-creds-file)
+    (condition-case _
+        (json-read-file copilot-agent-gemini--cli-creds-file)
+      (error nil))))
+
+(defun copilot-agent-gemini--cli-refresh-token (client-id client-secret refresh-token)
+  "Exchange REFRESH-TOKEN for a new access token using CLIENT-ID and CLIENT-SECRET.
+Saves and returns updated credentials alist."
+  (let* ((result  (copilot-agent-gemini--post-form
+                   "https://oauth2.googleapis.com/token"
+                   `(("grant_type"    . "refresh_token")
+                     ("client_id"     . ,client-id)
+                     ("client_secret" . ,client-secret)
+                     ("refresh_token" . ,refresh-token))))
+         (access  (cdr (assq 'access_token  result)))
+         (new-ref (or (cdr (assq 'refresh_token result)) refresh-token))
+         (exp-in  (cdr (assq 'expires_in    result))))
+    (unless access
+      (error "Gemini token refresh failed — re-run M-x copilot-agent-gemini-login"))
+    (let ((expires (+ (truncate (* (float-time) 1000))
+                      (* (or exp-in 3600) 1000))))
+      (copilot-agent-gemini--cli-save-creds access new-ref expires)
+      `((access_token  . ,access)
+        (refresh_token . ,new-ref)
+        (expires       . ,expires)))))
+
+(defun copilot-agent-gemini--cli-valid-access-token ()
+  "Return a valid access token string, refreshing if within 60 s of expiry.
+Signals an error if no credentials exist (run M-x copilot-agent-gemini-login)."
+  (let* ((creds   (copilot-agent-gemini--cli-load-creds))
+         (access  (and creds (cdr (assq 'access_token  creds))))
+         (refresh (and creds (cdr (assq 'refresh_token creds))))
+         (expires (and creds (cdr (assq 'expires       creds))))
+         (now-ms  (truncate (* (float-time) 1000))))
+    (unless access
+      (error "No Gemini CLI credentials.  Run M-x copilot-agent-gemini-login first."))
+    (if (and expires (> (- expires now-ms) 60000))
+        access
+      (unless refresh
+        (error "Gemini refresh token missing — re-run M-x copilot-agent-gemini-login"))
+      (let ((cli-creds (copilot-agent-gemini--cli-oauth-creds)))
+        (cdr (assq 'access_token
+                   (copilot-agent-gemini--cli-refresh-token
+                    (car cli-creds) (cdr cli-creds) refresh)))))))
+
+;;; ---------- CLI Auth — Login Command ----------
+
+(defconst copilot-agent-gemini--oauth-auth-url
+  "https://accounts.google.com/o/oauth2/v2/auth")
+(defconst copilot-agent-gemini--oauth-scopes
+  ;; cloud-platform is the scope the Gemini CLI's OAuth client is authorised for.
+  ;; API calls go through cloudcode-pa.googleapis.com (Code Assist), not the
+  ;; standard generativelanguage.googleapis.com endpoint.
+  "https://www.googleapis.com/auth/cloud-platform openid email profile")
+(defconst copilot-agent-gemini--oauth-token-url
+  "https://oauth2.googleapis.com/token")
+(defconst copilot-agent-gemini--code-assist-url
+  "https://cloudcode-pa.googleapis.com/v1internal"
+  "Cloud Code Assist API base URL used by Gemini CLI auth mode.")
+
+;;; ---------- CLI Auth — Synchronous JSON POST ----------
+
+(defun copilot-agent-gemini--json-post-sync (url token body-alist)
+  "POST BODY-ALIST as JSON to URL with Bearer TOKEN synchronously.
+Returns parsed JSON alist or signals an error."
+  (let* ((url-request-method "POST")
+         (url-request-extra-headers
+          `(("Content-Type"  . "application/json")
+            ("Authorization" . ,(concat "Bearer " token))))
+         (url-request-data  (encode-coding-string (json-encode body-alist) 'utf-8))
+         (buf (url-retrieve-synchronously url t t 30)))
+    (unless buf (error "Gemini: no response from %s" url))
+    (unwind-protect
+        (with-current-buffer buf
+          (goto-char (point-min))
+          (re-search-forward "^\r?$" nil t)
+          (json-read))
+      (when (buffer-live-p buf) (kill-buffer buf)))))
+
+;;; ---------- CLI Auth — Project ID / User Setup ----------
+
+(defconst copilot-agent-gemini--core-metadata
+  '((ideType    . "IDE_UNSPECIFIED")
+    (platform   . "PLATFORM_UNSPECIFIED")
+    (pluginType . "GEMINI")))
+
+(defun copilot-agent-gemini--json-get-sync (url token)
+  "GET URL with Bearer TOKEN synchronously.  Returns parsed JSON alist."
+  (let* ((url-request-method "GET")
+         (url-request-extra-headers
+          `(("Authorization" . ,(concat "Bearer " token))))
+         (buf (url-retrieve-synchronously url t t 30)))
+    (unless buf (error "Gemini: no response from %s" url))
+    (unwind-protect
+        (with-current-buffer buf
+          (goto-char (point-min))
+          (re-search-forward "^\r?$" nil t)
+          (json-read))
+      (when (buffer-live-p buf) (kill-buffer buf)))))
+
+(defun copilot-agent-gemini--cli-fetch-project (token)
+  "Perform the full Code Assist user-setup flow with TOKEN.
+Calls loadCodeAssist; if already onboarded returns the project ID.
+Otherwise calls onboardUser (prompting for a GCP project ID if the
+account tier requires one), polls any async operation to completion,
+and returns the resulting project ID string."
+  (let* ((load-res (copilot-agent-gemini--json-post-sync
+                    (concat copilot-agent-gemini--code-assist-url ":loadCodeAssist")
+                    token
+                    `((metadata . ,copilot-agent-gemini--core-metadata))))
+         (project  (cdr (assq 'cloudaicompanionProject load-res))))
+    (if project
+        project   ; already fully onboarded
+      ;; Need to onboard: pick the default allowedTier
+      (let* ((tiers        (append (cdr (assq 'allowedTiers load-res)) nil))
+             (default-tier (or (seq-find (lambda (t) (cdr (assq 'isDefault t))) tiers)
+                               (error "Gemini: no allowed tiers in loadCodeAssist response")))
+             (tier-id      (cdr (assq 'id default-tier)))
+             (needs-proj   (eq t (cdr (assq 'userDefinedCloudaicompanionProject default-tier))))
+             (gcp-proj     (when needs-proj
+                             (read-string
+                              (format "Gemini tier '%s' requires a GCP project ID: " tier-id))))
+             (onboard-body (if (and needs-proj gcp-proj (not (string-empty-p gcp-proj)))
+                               `((tierId                    . ,tier-id)
+                                 (cloudaicompanionProject   . ,gcp-proj)
+                                 (metadata . ((ideType    . "IDE_UNSPECIFIED")
+                                              (platform   . "PLATFORM_UNSPECIFIED")
+                                              (pluginType . "GEMINI")
+                                              (duetProject . ,gcp-proj))))
+                             `((tierId   . ,tier-id)
+                               (metadata . ,copilot-agent-gemini--core-metadata))))
+             (onboard-res  (copilot-agent-gemini--json-post-sync
+                            (concat copilot-agent-gemini--code-assist-url ":onboardUser")
+                            token onboard-body)))
+        ;; Poll LRO if not done immediately
+        (when (and (not (cdr (assq 'done onboard-res)))
+                   (cdr (assq 'name onboard-res)))
+          (let ((op-name (cdr (assq 'name onboard-res))))
+            (message "Gemini: waiting for account setup...")
+            (while (not (cdr (assq 'done onboard-res)))
+              (sit-for 3)
+              (setq onboard-res
+                    (copilot-agent-gemini--json-get-sync
+                     (concat copilot-agent-gemini--code-assist-url "/" op-name)
+                     token)))))
+        ;; Extract project from final response
+        (or (cdr (assq 'cloudaicompanionProject onboard-res))
+            (let ((resp (cdr (assq 'response onboard-res))))
+              (and resp (cdr (assq 'id (cdr (assq 'cloudaicompanionProject resp))))))
+            (error "Gemini onboarding failed: %s" (json-encode onboard-res)))))))
+
+;;;###autoload
+(defun copilot-agent-gemini-login ()
+  "Authenticate with Gemini using the installed Gemini CLI's OAuth credentials.
+Reads the client_id and client_secret from the Gemini CLI's bundled oauth2.js,
+performs a PKCE browser auth flow, and saves tokens to
+~/.emacs-copilot-agent/gemini_oauth_creds.json.
+
+Requires the Gemini CLI to be installed:
+  brew install gemini-cli  or  npm install -g @google/gemini-cli"
+  (interactive)
+  (let* ((cli-creds    (copilot-agent-gemini--cli-oauth-creds))
+         (client-id    (car cli-creds))
+         (client-secret (cdr cli-creds))
+         (pkce          (copilot-agent-gemini--pkce))
+         (verifier      (car pkce))
+         (challenge     (cdr pkce))
+         (port          (copilot-agent-gemini--start-callback-server))
+         (redirect-uri  (format "http://127.0.0.1:%d/oauth2callback" port))
+         (auth-url
+          (concat copilot-agent-gemini--oauth-auth-url
+                  "?client_id="             (url-hexify-string client-id)
+                  "&redirect_uri="          (url-hexify-string redirect-uri)
+                  "&response_type=code"
+                  "&scope="                 (url-hexify-string copilot-agent-gemini--oauth-scopes)
+                  "&code_challenge="        challenge
+                  "&code_challenge_method=S256"
+                  "&access_type=offline"
+                  "&prompt=consent")))
+    (message "Gemini login: opening browser for Google sign-in...")
+    (browse-url auth-url)
+    ;; Wait up to 120 s for the browser callback
+    (let ((deadline (+ (float-time) 120))
+          code)
+      (while (and (< (float-time) deadline)
+                  (not (setq code copilot-agent-gemini--oauth-code)))
+        (sit-for 0.5))
+      (when (process-live-p copilot-agent-gemini--oauth-server)
+        (delete-process copilot-agent-gemini--oauth-server)
+        (setq copilot-agent-gemini--oauth-server nil))
+      (unless code
+        (error "Gemini login timed out.  Run M-x copilot-agent-gemini-login again."))
+      ;; Exchange auth code for tokens
+      (let* ((result  (copilot-agent-gemini--post-form
+                       copilot-agent-gemini--oauth-token-url
+                       `(("grant_type"    . "authorization_code")
+                         ("client_id"     . ,client-id)
+                         ("client_secret" . ,client-secret)
+                         ("code"          . ,code)
+                         ("redirect_uri"  . ,redirect-uri)
+                         ("code_verifier" . ,verifier))))
+             (access  (cdr (assq 'access_token  result)))
+             (refresh (cdr (assq 'refresh_token result)))
+             (exp-in  (cdr (assq 'expires_in    result))))
+        (unless access
+          (error "Gemini token exchange failed: %s" (json-encode result)))
+        (let* ((expires  (+ (truncate (* (float-time) 1000))
+                            (* (or exp-in 3600) 1000)))
+               ;; Fetch the free-tier project ID required by Code Assist API
+               (_ (message "Gemini login: fetching project ID..."))
+               (project  (copilot-agent-gemini--cli-fetch-project access)))
+          (copilot-agent-gemini--cli-save-creds access refresh expires project)
+          (message "Gemini login successful!  Project: %s  Credentials saved to %s"
+                   project copilot-agent-gemini--cli-creds-file))))))
 
 ;;; ---------- Tool Schema Conversion ----------
 
@@ -223,25 +613,76 @@ Returns plist with :text :tool-calls :stop-reason :raw-content :error."
 
 (defun copilot-agent-gemini-send (session callback)
   "Send SESSION to Gemini API asynchronously.
-CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING)."
-  (let* ((api-key  (copilot-agent-gemini--api-key))
-         (model    (or (plist-get session :model)
-                       copilot-agent-gemini-default-model))
-         (url      (format "%s?key=%s"
-                           (copilot-agent-gemini--endpoint model)
-                           api-key))
-         (body     (copilot-agent-gemini--build-request session)))
-    ;; Gemini uses the API key as a query param, no special auth header needed
-    (copilot-agent-api--curl-post url '() body
-     (lambda (raw-output http-error)
-       (if http-error
-           (funcall callback nil http-error)
-         (let ((parsed (copilot-agent-gemini--parse-response raw-output)))
-           (if (plist-get parsed :error)
-               (funcall callback nil (plist-get parsed :error))
-             (funcall callback parsed nil))))))))
+CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING).
+Dispatches to API-key or CLI-OAuth mode based on `copilot-agent-gemini-auth-mode'."
+  (if (eq copilot-agent-gemini-auth-mode 'cli)
+      (copilot-agent-gemini--send-cli session callback)
+    (copilot-agent-gemini--send-api-key session callback)))
 
-;;; ---------- Tool Result Message Builder ----------
+(defun copilot-agent-gemini--send-api-key (session callback)
+  "Send SESSION using an API key (query-param auth)."
+  (let* ((api-key (condition-case e
+                      (copilot-agent-gemini--api-key)
+                    (error (funcall callback nil (error-message-string e)) nil)))
+         (model   (or (plist-get session :model) copilot-agent-gemini-default-model))
+         (url     (format "%s?key=%s" (copilot-agent-gemini--endpoint model) api-key))
+         (body    (copilot-agent-gemini--build-request session)))
+    (when api-key
+      (copilot-agent-api--curl-post url '() body
+       (lambda (raw http-error)
+         (if http-error
+             (funcall callback nil http-error)
+           (let ((parsed (copilot-agent-gemini--parse-response raw)))
+             (if (plist-get parsed :error)
+                 (funcall callback nil (plist-get parsed :error))
+               (funcall callback parsed nil)))))))))
+
+(defun copilot-agent-gemini--send-cli (session callback)
+  "Send SESSION via Cloud Code Assist API using an OAuth Bearer token.
+The Code Assist endpoint wraps the standard Gemini request in:
+  {\"model\": MODEL, \"project\": PROJECT, \"request\": {GEMINI-BODY}}
+and returns the Gemini response nested under a \"response\" key."
+  (let* ((token   (condition-case e
+                      (copilot-agent-gemini--cli-valid-access-token)
+                    (error (funcall callback nil (error-message-string e)) nil))))
+    (when token
+      (let* ((creds   (copilot-agent-gemini--cli-load-creds))
+             (project (or (cdr (assq 'project creds))
+                          ;; Project missing from old credentials — fetch and cache it now
+                          (let ((p (condition-case e
+                                       (copilot-agent-gemini--cli-fetch-project token)
+                                     (error (funcall callback nil (error-message-string e))
+                                            nil))))
+                            (when p
+                              (copilot-agent-gemini--cli-save-creds
+                               (cdr (assq 'access_token  creds))
+                               (cdr (assq 'refresh_token creds))
+                               (cdr (assq 'expires       creds))
+                               p))
+                            p)))
+             (model     (or (plist-get session :model) copilot-agent-gemini-default-model))
+             (url       (concat copilot-agent-gemini--code-assist-url ":generateContent"))
+             (inner-req (json-read-from-string (copilot-agent-gemini--build-request session)))
+             (body      (and project
+                            (json-encode `((model   . ,model)
+                                          (project . ,project)
+                                          (request . ,inner-req))))))
+        (when body (copilot-agent-api--curl-post
+         url
+         (list (concat "Authorization: Bearer " token))
+         body
+         (lambda (raw http-error)
+           (if http-error
+               (funcall callback nil http-error)
+             ;; Code Assist wraps the Gemini response in a "response" field
+             (let* ((outer  (condition-case _ (json-read-from-string raw) (error nil)))
+                    (inner  (if (and outer (assq 'response outer))
+                                (json-encode (cdr (assq 'response outer)))
+                              raw))
+                    (parsed (copilot-agent-gemini--parse-response inner)))
+               (if (plist-get parsed :error)
+                   (funcall callback nil (plist-get parsed :error))
+                 (funcall callback parsed nil)))))))))))
 
 (defun copilot-agent-gemini-make-tool-result-message (tool-results)
   "Build a Gemini user-role message with TOOL-RESULTS.

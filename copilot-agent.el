@@ -17,7 +17,9 @@
 ;; commands execute on the remote host transparently.
 ;;
 ;; Quick start:
-;;   1. Add API key to ~/.authinfo (see provider files for format)
+;;   1. Add API key to ~/.authinfo (see provider files for format),
+;;      or for Gemini: M-x copilot-agent-gemini-login (uses installed Gemini CLI)
+;;      or for Qwen:   M-x copilot-agent-qwen-login   (free portal account)
 ;;   2. (require 'copilot-agent)
 ;;   3. M-x copilot-agent
 ;;
