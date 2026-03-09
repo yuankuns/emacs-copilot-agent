@@ -1,7 +1,7 @@
 # emacs-copilot-agent
 
 An AI coding agent for Emacs, similar to VSCode Copilot Chat.  Connects to
-large language models (Anthropic Claude, Google Gemini, …) and uses
+large language models (Anthropic Claude, Google Gemini, Alibaba Qwen) and uses
 **tool calling** to read files, run shell commands, search code, and edit
 your project — all from a chat buffer inside Emacs.
 
@@ -34,22 +34,50 @@ automatically.
 
 ---
 
-## Features
+## Quick Start
 
-- **Multi-provider** — Anthropic Claude and Google Gemini out of the box;
-  additional providers can be registered without modifying core code.
-- **Agentic tool use** — the LLM can run shell commands, read/write files,
-  list directories, and grep for patterns in a loop until the task is done.
-- **Tool approval** — every tool call is shown to you before execution with
-  a `[y]es / [a]ll / [n]o` prompt.  Choose *all* to approve the rest of
-  the turn automatically.
-- **TRAMP-aware** — editing `/ssh:user@host:/path/to/file`?  Tool commands
-  run on `user@host`, not on your local machine.
-- **Context injection** — automatically includes the current buffer's file
-  path in the system prompt so the agent knows what you are working on.
-- **Dedicated chat buffer** — persistent conversation history, rendered
-  sections for user/assistant/tool output, and a live input area at the
-  bottom.
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/your-org/emacs-copilot-agent.git \
+    ~/.emacs.d/emacs-copilot-agent
+```
+
+**2. Add to your `~/.emacs.d/init.el`**
+
+```elisp
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent")
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent/providers")
+(require 'copilot-agent)
+```
+
+**3. Authenticate with a provider** (pick one):
+
+- **Anthropic** — add to `~/.authinfo`:
+  ```
+  machine api.anthropic.com login apikey password YOUR_ANTHROPIC_KEY
+  ```
+- **Gemini** — add to `~/.authinfo`:
+  ```
+  machine generativelanguage.googleapis.com login apikey password YOUR_GEMINI_KEY
+  ```
+  Or log in with the free Gemini CLI (no API key needed):
+  ```elisp
+  (setq copilot-agent-provider 'gemini)
+  (setq copilot-agent-gemini-auth-mode 'cli)
+  ```
+  Then run `M-x copilot-agent-gemini-login` once.
+- **Qwen** (free, no API key) — run `M-x copilot-agent-qwen-login` once
+  and follow the browser prompt, then set:
+  ```elisp
+  (setq copilot-agent-provider 'qwen)
+  ```
+
+**4. Open the chat**
+
+```
+M-x copilot-agent
+```
 
 ---
 
@@ -59,28 +87,27 @@ automatically.
 |---|---|
 | Emacs | 27.1 or later |
 | curl | any recent version (used for HTTP) |
-| An Anthropic or Gemini API key | — |
+| An API key or free account | Anthropic, Gemini, or Qwen |
 
 ---
 
 ## Installation
 
-### Manual (recommended for now)
+### Manual
 
-1. Clone the repository:
+```bash
+git clone https://github.com/your-org/emacs-copilot-agent.git \
+    ~/.emacs.d/emacs-copilot-agent
+```
 
-   ```bash
-   git clone https://github.com/your-org/emacs-copilot-agent.git \
-       ~/.emacs.d/emacs-copilot-agent
-   ```
+Add to `init.el`:
 
-2. Add to your `init.el`:
-
-   ```elisp
-   (add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent")
-   (add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent/providers")
-   (require 'copilot-agent)
-   ```
+```elisp
+;; Both paths are required — providers/ holds the backend files
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent")
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent/providers")
+(require 'copilot-agent)
+```
 
 ### With `use-package` + `straight.el`
 
@@ -94,23 +121,73 @@ automatically.
 
 ---
 
-## API Key Setup
+## Provider Setup
+
+### Anthropic Claude (API key)
+
+Get a key at <https://console.anthropic.com/>.  Add to `~/.authinfo`:
+
+```
+machine api.anthropic.com login apikey password YOUR_ANTHROPIC_KEY
+```
+
+This is the default provider.  No further configuration needed.
+
+### Google Gemini (API key)
+
+Get a key at <https://aistudio.google.com/>.  Add to `~/.authinfo`:
+
+```
+machine generativelanguage.googleapis.com login apikey password YOUR_GEMINI_KEY
+```
+
+Then in `init.el`:
+
+```elisp
+(setq copilot-agent-provider 'gemini)
+```
+
+### Google Gemini (free — via Gemini CLI, no API key)
+
+1. Install the Gemini CLI:
+   ```bash
+   npm install -g @google/gemini-cli   # or: brew install gemini-cli
+   ```
+2. In `init.el`:
+   ```elisp
+   (setq copilot-agent-provider 'gemini)
+   (setq copilot-agent-gemini-auth-mode 'cli)
+   ```
+3. Run once inside Emacs:
+   ```
+   M-x copilot-agent-gemini-login
+   ```
+   A browser window opens for Google OAuth.  Tokens are saved to
+   `~/.emacs-copilot-agent/gemini_oauth_creds.json` and auto-refreshed.
+
+### Alibaba Qwen (free — OAuth, no API key)
+
+1. In `init.el`:
+   ```elisp
+   (setq copilot-agent-provider 'qwen)
+   ```
+2. Run once inside Emacs:
+   ```
+   M-x copilot-agent-qwen-login
+   ```
+   A browser window opens to <https://chat.qwen.ai>.  Approve the device,
+   then return to Emacs.  Tokens are saved to `~/.qwen/oauth_creds.json`
+   and auto-refreshed.  Free tier: 2 000 requests/day.
+
+---
+
+## API Key Security
 
 Keys are read from `~/.authinfo` or `~/.authinfo.gpg` via Emacs'
 built-in `auth-source` library.  **No keys are stored in Emacs Lisp
 variables or your init file.**
 
-Add one or both of the following lines to `~/.authinfo`:
-
-```
-# Anthropic Claude
-machine api.anthropic.com login apikey password YOUR_ANTHROPIC_KEY
-
-# Google Gemini
-machine generativelanguage.googleapis.com login apikey password YOUR_GEMINI_KEY
-```
-
-To use the encrypted version (`~/.authinfo.gpg`), create it with:
+To use the encrypted version:
 
 ```bash
 gpg --output ~/.authinfo.gpg --symmetric ~/.authinfo
@@ -127,14 +204,13 @@ All settings live under the `copilot-agent` customisation group
 (`M-x customize-group RET copilot-agent RET`).  Common variables:
 
 ```elisp
-;; Provider to use: 'anthropic (default) or 'gemini
+;; Provider: 'anthropic (default), 'gemini, or 'qwen
 (setq copilot-agent-provider 'anthropic)
 
-;; Default model (overrides the provider's built-in default)
-;; Anthropic default: "claude-sonnet-4-6"
-;; Gemini default:    "gemini-2.0-flash"
+;; Model overrides (optional — providers have sensible defaults)
 ;; (setq copilot-agent-anthropic-default-model "claude-opus-4-6")
 ;; (setq copilot-agent-gemini-default-model    "gemini-2.0-pro")
+;; (setq copilot-agent-qwen-default-model      "coder-model")  ; or "vision-model"
 
 ;; Include the current buffer's file path in the system prompt
 (setq copilot-agent-auto-context t)   ; default: t
@@ -142,19 +218,25 @@ All settings live under the `copilot-agent` customisation group
 ;; Maximum tokens per response
 (setq copilot-agent-max-tokens 8192)  ; default: 8192
 
-;; Bind the command map to a prefix key
-(copilot-agent-setup-keybindings)     ; binds C-c / by default
+;; Bind the command map to a prefix key (C-c / by default)
+(copilot-agent-setup-keybindings)
 
-;; Custom system prompt
-(setq copilot-agent-system-prompt "You are a concise coding assistant…")
+;; Custom system prompt (optional)
+;; (setq copilot-agent-system-prompt "You are a concise coding assistant…")
 ```
 
-### Switch provider per session
+### Complete `init.el` example
 
 ```elisp
-;; Temporarily use Gemini for the current session
-(setq copilot-agent-provider 'gemini)
-(copilot-agent)
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent")
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent/providers")
+(require 'copilot-agent)
+
+;; Choose a provider
+(setq copilot-agent-provider 'anthropic)
+
+;; Optional: bind C-c / prefix
+(copilot-agent-setup-keybindings)
 ```
 
 ---
@@ -317,7 +399,7 @@ The agent will run commands on `internal-host`.
 
 ## Running the Tests
 
-The test suite uses Emacs' built-in ERT framework (105 tests).
+The test suite uses Emacs' built-in ERT framework.
 
 ```bash
 # From the project root:
@@ -327,12 +409,6 @@ emacs --batch -l test/run-tests.el
 emacs --batch -L . -L providers \
       -l test/test-copilot-agent-tools.el \
       -f ert-run-tests-batch-and-exit
-```
-
-Expected output:
-
-```
-Ran 105 tests, 105 results as expected (0.09 sec)
 ```
 
 ---
@@ -345,15 +421,18 @@ emacs-copilot-agent/
 ├── copilot-agent-api.el        Provider registry, async HTTP, agentic loop
 ├── copilot-agent-tools.el      Tool schema + TRAMP-aware implementations
 ├── copilot-agent-ui.el         Chat buffer, rendering, input, approval UI
+├── copilot-agent-status.el     Model/status line helpers
 ├── providers/
 │   ├── copilot-agent-anthropic.el   Anthropic Claude backend
-│   └── copilot-agent-gemini.el      Google Gemini backend
+│   ├── copilot-agent-gemini.el      Google Gemini backend
+│   └── copilot-agent-qwen.el        Alibaba Qwen backend (free OAuth)
 └── test/
     ├── run-tests.el                  Test runner (all suites)
-    ├── test-copilot-agent-tools.el   Tool tests (40 tests)
-    ├── test-copilot-agent-api.el     API/loop tests (20 tests)
-    ├── test-copilot-agent-anthropic.el  Anthropic provider tests (25 tests)
-    └── test-copilot-agent-gemini.el     Gemini provider tests (20 tests)
+    ├── test-copilot-agent-tools.el   Tool tests
+    ├── test-copilot-agent-api.el     API/loop tests
+    ├── test-copilot-agent-anthropic.el  Anthropic provider tests
+    ├── test-copilot-agent-gemini.el     Gemini provider tests
+    └── test-copilot-agent-qwen.el       Qwen provider tests
 ```
 
 ---
