@@ -19,7 +19,6 @@
 ;;; Code:
 
 (require 'json)
-(require 'url)
 (require 'copilot-agent-api)
 
 ;;; ---------- Constants ----------
@@ -74,47 +73,51 @@ for your subscription, then set this to any model ID from that list."
 (defvar copilot-agent-github-copilot--models-cache nil
   "In-memory cache of available model ID strings.")
 
-;;; ---------- Synchronous HTTP helpers ----------
+;;; ---------- Synchronous HTTP helpers (curl-based) ----------
+;; Using curl directly avoids url.el's Accept-header quirks that cause
+;; GitHub to return URL-encoded responses instead of JSON.
+
+(defun copilot-agent-github-copilot--curl-sync (method url headers &optional body)
+  "Make a synchronous HTTP request via curl and return parsed JSON.
+METHOD is \"GET\" or \"POST\".  HEADERS is a list of \"Name: Value\" strings.
+BODY is the URL-encoded POST body string.  Signals an error on failure."
+  (let ((req-file (when body (make-temp-file "copilot-agent-gh-req"))))
+    (when req-file
+      (write-region body nil req-file nil 'silent))
+    (unwind-protect
+        (with-temp-buffer
+          (let* ((args (append
+                        (list "--silent" "--show-error" "--fail-with-body"
+                              "-X" method
+                              "-H" "Accept: application/json")
+                        (mapcan (lambda (h) (list "-H" h)) headers)
+                        (when req-file
+                          (list "-H" "Content-Type: application/x-www-form-urlencoded"
+                                "--data" (format "@%s" req-file)))
+                        (list url)))
+                 (exit-code (apply #'call-process "curl" nil t nil args)))
+            (goto-char (point-min))
+            (condition-case _
+                (json-read)
+              (error
+               (error "GitHub Copilot: unexpected response (HTTP %d?): %s"
+                      exit-code (buffer-string))))))
+      (when (and req-file (file-exists-p req-file))
+        (delete-file req-file)))))
 
 (defun copilot-agent-github-copilot--post-form (url params)
-  "POST URL-encoded PARAMS alist to URL synchronously.
-Returns a parsed JSON alist or signals an error."
-  (let* ((body (mapconcat (lambda (p)
-                            (concat (url-hexify-string (car p))
-                                    "="
-                                    (url-hexify-string (cdr p))))
-                          params "&"))
-         (url-request-method "POST")
-         (url-request-extra-headers
-          '(("Content-Type" . "application/x-www-form-urlencoded")
-            ("Accept"       . "application/json")))
-         (url-request-data (encode-coding-string body 'utf-8))
-         (buf (url-retrieve-synchronously url t t 30)))
-    (unless buf
-      (error "GitHub Copilot: no response from %s" url))
-    (unwind-protect
-        (with-current-buffer buf
-          (goto-char (point-min))
-          (re-search-forward "^\r?$" nil t)
-          (json-read))
-      (when (buffer-live-p buf) (kill-buffer buf)))))
+  "POST URL-encoded PARAMS alist to URL and return parsed JSON alist."
+  (let ((body (mapconcat (lambda (p)
+                           (concat (url-hexify-string (car p))
+                                   "="
+                                   (url-hexify-string (cdr p))))
+                         params "&")))
+    (copilot-agent-github-copilot--curl-sync "POST" url nil body)))
 
 (defun copilot-agent-github-copilot--get-json (url github-token)
-  "GET URL synchronously using GITHUB-TOKEN for authentication.
-Returns a parsed JSON alist or signals an error."
-  (let* ((url-request-method "GET")
-         (url-request-extra-headers
-          `(("Authorization" . ,(concat "token " github-token))
-            ("Accept"        . "application/json")))
-         (buf (url-retrieve-synchronously url t t 30)))
-    (unless buf
-      (error "GitHub Copilot: no response from %s" url))
-    (unwind-protect
-        (with-current-buffer buf
-          (goto-char (point-min))
-          (re-search-forward "^\r?$" nil t)
-          (json-read))
-      (when (buffer-live-p buf) (kill-buffer buf)))))
+  "GET URL authenticated with GITHUB-TOKEN and return parsed JSON alist."
+  (copilot-agent-github-copilot--curl-sync
+   "GET" url (list (concat "Authorization: token " github-token))))
 
 ;;; ---------- Credential Storage ----------
 
@@ -219,23 +222,14 @@ one-time code to approve access.  The GitHub OAuth token is saved to
 (defun copilot-agent-github-copilot--fetch-models ()
   "Fetch available models from the Copilot API.
 Returns a list of model ID strings and persists them to disk."
-  (let* ((token (copilot-agent-github-copilot--valid-session-token))
-         (url   (concat copilot-agent-github-copilot--api-base "/models"))
-         (url-request-method "GET")
-         (url-request-extra-headers
-          `(("Authorization"          . ,(concat "Bearer " token))
-            ("Copilot-Integration-Id" . "vscode-chat")
-            ("Editor-Version"         . "vscode/1.85.0")
-            ("Accept"                 . "application/json")))
-         (buf (url-retrieve-synchronously url t t 30)))
-    (unless buf (error "GitHub Copilot: no response from /models"))
-    (let* ((data   (unwind-protect
-                       (with-current-buffer buf
-                         (goto-char (point-min))
-                         (re-search-forward "^\r?$" nil t)
-                         (json-read))
-                     (kill-buffer buf)))
-           (models (cdr (assq 'data data)))
+  (let* ((token  (copilot-agent-github-copilot--valid-session-token))
+         (url    (concat copilot-agent-github-copilot--api-base "/models"))
+         (data   (copilot-agent-github-copilot--curl-sync
+                  "GET" url
+                  (list (concat "Authorization: Bearer " token)
+                        "Copilot-Integration-Id: vscode-chat"
+                        "Editor-Version: vscode/1.85.0")))
+         (models (cdr (assq 'data data)))
            (ids    (when (and models (vectorp models))
                      (mapcar (lambda (m) (cdr (assq 'id m)))
                              (append models nil)))))
