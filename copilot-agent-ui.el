@@ -227,6 +227,23 @@ Returns t if approved, nil if declined."
 
 ;;; ---------- Send ----------
 
+(defun copilot-agent-ui--refresh-context (session)
+  "Update SESSION :context-buffer to the most recently focused file buffer.
+Iterates `buffer-list' (MRU order) and picks the first live buffer
+visiting a file that is not the agent chat buffer itself.  This ensures
+that switching to a different file between messages moves the tool
+context to that file without requiring a new session."
+  (let ((agent-buf (current-buffer))
+        (src (cl-find-if
+              (lambda (b)
+                (and (not (eq b (current-buffer)))
+                     (buffer-live-p b)
+                     (buffer-file-name b)))
+              (buffer-list))))
+    (when src
+      (plist-put session :context-buffer src)
+      (copilot-agent-tools-set-context src))))
+
 (defun copilot-agent-ui-send ()
   "Send the current input to the active agent session."
   (interactive)
@@ -237,6 +254,9 @@ Returns t if approved, nil if declined."
         (user-error "Please enter a message"))
       (unless session
         (user-error "No active session — use M-x copilot-agent to start one"))
+      ;; Always re-anchor to the most recently visited file buffer so the
+      ;; user does not need to start a new session after switching files.
+      (copilot-agent-ui--refresh-context session)
       (copilot-agent-ui-insert-user-message input)
       (copilot-agent-ui--clear-input)
       (copilot-agent-ui--show-thinking)
