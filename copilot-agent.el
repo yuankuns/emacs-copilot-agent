@@ -4,7 +4,7 @@
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: ai llm agent tools copilot
-;; URL: https://github.com/your-org/emacs-copilot-agent
+;; URL: https://github.com/yuankuns/emacs-copilot-agent
 
 ;;; Commentary:
 ;; An Emacs AI coding agent similar to VSCode Copilot Chat.
@@ -47,6 +47,7 @@
   :type '(choice (const :tag "Anthropic Claude"       anthropic)
                  (const :tag "Google Gemini"          gemini)
                  (const :tag "Alibaba Qwen (free)"    qwen)
+                 (const :tag "GitHub Copilot"         github-copilot)
                  (symbol :tag "Other"))
   :group 'copilot-agent)
 
@@ -202,6 +203,40 @@ commands target the right directory (including remote SSH via TRAMP)."
     (message "New Copilot Agent session started")))
 
 ;;;###autoload
+(defun copilot-agent-select-model ()
+  "Select a provider and model globally from all registered providers.
+Shows a completing-read of \"provider / model\" entries.  Selecting one
+sets `copilot-agent-provider' and the provider's default model variable,
+affecting all new chat sessions.
+
+GitHub Copilot models are fetched automatically on first use and cached
+to disk; run `copilot-agent-github-copilot-refresh-models' to update."
+  (interactive)
+  (let ((candidates '())
+        (entry-map  (make-hash-table :test #'equal)))
+    (maphash
+     (lambda (id plist)
+       (let ((list-fn (plist-get plist :list-models-fn)))
+         (when list-fn
+           (dolist (model (funcall list-fn))
+             (let ((key (format "%-15s / %s" (symbol-name id) model)))
+               (push key candidates)
+               (puthash key (cons id model) entry-map))))))
+     copilot-agent-api--providers)
+    (unless candidates
+      (user-error "No providers have a model list — load provider files first"))
+    (let* ((choice (completing-read "Model: " (sort candidates #'string<) nil t))
+           (entry  (gethash choice entry-map)))
+      (when entry
+        (let* ((provider-id (car entry))
+               (model-id    (cdr entry))
+               (plist       (gethash provider-id copilot-agent-api--providers))
+               (set-fn      (plist-get plist :set-model-fn)))
+          (setq copilot-agent-provider provider-id)
+          (when set-fn (funcall set-fn model-id))
+          (message "Switched to %s / %s" provider-id model-id))))))
+
+;;;###autoload
 (defun copilot-agent-clear-history ()
   "Clear the message history of the current session (keeps the session open)."
   (interactive)
@@ -227,6 +262,7 @@ commands target the right directory (including remote SSH via TRAMP)."
     (define-key map (kbd "a") #'copilot-agent)
     (define-key map (kbd "e") #'copilot-agent-explain-region)
     (define-key map (kbd "f") #'copilot-agent-fix-errors)
+    (define-key map (kbd "m") #'copilot-agent-select-model)
     (define-key map (kbd "n") #'copilot-agent-new-chat)
     (define-key map (kbd "s") #'copilot-agent-status)
     map)
@@ -244,9 +280,10 @@ commands target the right directory (including remote SSH via TRAMP)."
 (defun copilot-agent-load-providers ()
   "Load all bundled providers."
   (let ((dir (file-name-directory (or load-file-name buffer-file-name))))
-    (load (expand-file-name "providers/copilot-agent-anthropic" dir) t)
-    (load (expand-file-name "providers/copilot-agent-gemini"    dir) t)
-    (load (expand-file-name "providers/copilot-agent-qwen"      dir) t)))
+    (load (expand-file-name "providers/copilot-agent-anthropic"      dir) t)
+    (load (expand-file-name "providers/copilot-agent-gemini"         dir) t)
+    (load (expand-file-name "providers/copilot-agent-qwen"           dir) t)
+    (load (expand-file-name "providers/copilot-agent-github-copilot" dir) t)))
 
 (copilot-agent-load-providers)
 

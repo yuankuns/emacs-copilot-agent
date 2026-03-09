@@ -154,6 +154,18 @@ TOOL-RESULTS is a list of plists with :tool-use-id and :content."
                            (content     . ,(plist-get r :content))))
                        tool-results)))))
 
+;;; ---------- Model List ----------
+
+(defun copilot-agent-anthropic--list-models ()
+  "Return the list of known Anthropic model IDs."
+  '("claude-opus-4-6"
+    "claude-sonnet-4-6"
+    "claude-haiku-4-5-20251001"))
+
+(defun copilot-agent-anthropic--set-model (model)
+  "Set the active Anthropic model to MODEL."
+  (setq copilot-agent-anthropic-default-model model))
+
 ;;; ---------- Provider Registration ----------
 
 (with-eval-after-load 'copilot-agent-api
@@ -164,7 +176,9 @@ TOOL-RESULTS is a list of plists with :tool-use-id and :content."
          :default-model-fn      (lambda () copilot-agent-anthropic-default-model)
          :send-fn               #'copilot-agent-anthropic-send
          :make-tool-result-fn   #'copilot-agent-anthropic-make-tool-result-message
-         :format-tools-fn       #'copilot-agent-anthropic--format-tools)))
+         :format-tools-fn       #'copilot-agent-anthropic--format-tools
+         :list-models-fn        #'copilot-agent-anthropic--list-models
+         :set-model-fn          #'copilot-agent-anthropic--set-model)))
 
 (provide 'copilot-agent-anthropic)
 ;;; copilot-agent-anthropic.el ends here
