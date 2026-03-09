@@ -305,5 +305,71 @@ right after the two '> ' characters."
       (cl-letf (((symbol-function 'read-char-choice) (lambda (&rest _) ?y)))
         (should (copilot-agent-ui-approve-tool "tool" '() session))))))
 
+;;; ---------- Context refresh ----------
+
+(ert-deftest ui/refresh-context-picks-mru-file-buffer ()
+  "refresh-context updates :context-buffer and :system-prompt to the new file.
+This is the regression test for the bug where writing code always targeted the
+first file opened, regardless of which file the user had switched to."
+  (with-fresh-chat-buffer
+    (let* ((old-buf   (generate-new-buffer "*ui-test-old*"))
+           (file-buf  (generate-new-buffer "*ui-test-refresh*"))
+           (agent-buf (get-buffer copilot-agent-ui--buffer-name))
+           ;; Simulate a session originally created for old-buf
+           (session   (list :context-buffer old-buf
+                            :system-prompt  "base\n\nCurrent file: /tmp/old.el")))
+      (with-current-buffer file-buf
+        (setq buffer-file-name "/tmp/test-refresh.el"))
+      (unwind-protect
+          (cl-letf (((symbol-function 'buffer-list)
+                     (lambda () (list agent-buf file-buf))))
+            (copilot-agent-ui--refresh-context session)
+            (should (eq (plist-get session :context-buffer) file-buf))
+            ;; System prompt must now mention the new file, not the old one.
+            (should (string-match-p "test-refresh\\.el"
+                                    (or (plist-get session :system-prompt) "")))
+            (should-not (string-match-p "old\\.el"
+                                        (plist-get session :system-prompt))))
+        (with-current-buffer file-buf (setq buffer-file-name nil))
+        (kill-buffer file-buf)
+        (kill-buffer old-buf)))))
+
+(ert-deftest ui/refresh-context-no-change-when-same-buffer ()
+  "refresh-context does not update session when context buffer is unchanged."
+  (with-fresh-chat-buffer
+    (let* ((file-buf  (generate-new-buffer "*ui-test-same*"))
+           (agent-buf (get-buffer copilot-agent-ui--buffer-name))
+           (session   (list :context-buffer file-buf
+                            :system-prompt  "original")))
+      (with-current-buffer file-buf
+        (setq buffer-file-name "/tmp/same.el"))
+      (unwind-protect
+          (cl-letf (((symbol-function 'buffer-list)
+                     (lambda () (list agent-buf file-buf))))
+            (copilot-agent-ui--refresh-context session)
+            ;; Prompt must NOT be rebuilt when buffer hasn't changed.
+            (should (equal (plist-get session :system-prompt) "original")))
+        (with-current-buffer file-buf (setq buffer-file-name nil))
+        (kill-buffer file-buf)))))
+
+(ert-deftest ui/refresh-context-ignores-agent-buffer ()
+  "refresh-context never sets :context-buffer to the agent chat buffer itself."
+  (with-fresh-chat-buffer
+    (let ((session (list :context-buffer nil)))
+      (copilot-agent-ui--refresh-context session)
+      (should-not (eq (plist-get session :context-buffer)
+                      (get-buffer copilot-agent-ui--buffer-name))))))
+
+(ert-deftest ui/refresh-context-keeps-old-when-no-file-buffer ()
+  "refresh-context leaves :context-buffer unchanged when no file buffers exist."
+  (with-fresh-chat-buffer
+    (let* ((original (get-buffer-create " *ctx-original*"))
+           (session  (list :context-buffer original)))
+      (cl-letf (((symbol-function 'buffer-list)
+                 (lambda () (list (get-buffer copilot-agent-ui--buffer-name)))))
+        (copilot-agent-ui--refresh-context session)
+        (should (eq (plist-get session :context-buffer) original)))
+      (kill-buffer original))))
+
 (provide 'test-copilot-agent-ui)
 ;;; test-copilot-agent-ui.el ends here

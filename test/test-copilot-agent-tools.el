@@ -60,7 +60,7 @@ The directory is deleted after BODY completes."
 ;;; ---------- Path Resolution ----------
 
 (ert-deftest tools/resolve-absolute-passes-through ()
-  "Absolute paths are returned unchanged."
+  "Local-absolute paths are returned unchanged when context is also local."
   (let ((copilot-agent-tools--context (list :directory "/ctx/")))
     (should (equal (copilot-agent-tools--resolve "/etc/hosts") "/etc/hosts"))))
 
@@ -74,6 +74,28 @@ The directory is deleted after BODY completes."
   (let ((copilot-agent-tools--context (list :directory "/mydir/")))
     ;; expand-file-name strips the trailing slash, so just check the prefix
     (should (string-prefix-p "/mydir" (copilot-agent-tools--resolve "")))))
+
+(ert-deftest tools/resolve-local-absolute-in-remote-context ()
+  "Local-absolute paths are anchored to the remote host when context is remote.
+This is the core TRAMP bug: LLM generates /home/user/file.py but context is
+/ssh:host:/home/user/ — without the fix the file was written locally."
+  (let ((copilot-agent-tools--context
+         (list :directory "/ssh:user@host:/home/user/project/")))
+    (should (equal (copilot-agent-tools--resolve "/home/user/project/file.py")
+                   "/ssh:user@host:/home/user/project/file.py"))))
+
+(ert-deftest tools/resolve-relative-in-remote-context ()
+  "Relative paths are expanded against the remote context directory."
+  (let ((copilot-agent-tools--context
+         (list :directory "/ssh:user@host:/home/user/project/")))
+    (should (equal (copilot-agent-tools--resolve "src/main.py")
+                   "/ssh:user@host:/home/user/project/src/main.py"))))
+
+(ert-deftest tools/resolve-tramp-path-passes-through ()
+  "A full TRAMP path is never modified regardless of context."
+  (let ((copilot-agent-tools--context (list :directory "/ctx/")))
+    (should (equal (copilot-agent-tools--resolve "/ssh:host:/etc/hosts")
+                   "/ssh:host:/etc/hosts"))))
 
 ;;; ---------- TRAMP Detection ----------
 

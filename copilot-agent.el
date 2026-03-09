@@ -83,9 +83,13 @@ your tool commands will run on the remote host automatically."
   (let* ((buf      (or context-buffer (current-buffer)))
          (prompt   (if (and copilot-agent-auto-context
                             (buffer-file-name buf))
-                       (format "%s\n\nCurrent file: %s"
-                               copilot-agent-system-prompt
-                               (buffer-file-name buf))
+                       ;; Strip TRAMP prefix so the LLM sees a plain local path.
+                       ;; copilot-agent-tools--resolve re-anchors local-absolute
+                       ;; paths to the correct remote host automatically.
+                       (let ((file (or (file-remote-p (buffer-file-name buf) 'localname)
+                                       (buffer-file-name buf))))
+                         (format "%s\n\nCurrent file: %s"
+                                 copilot-agent-system-prompt file))
                      copilot-agent-system-prompt)))
     (copilot-agent-api-new-session
      copilot-agent-provider

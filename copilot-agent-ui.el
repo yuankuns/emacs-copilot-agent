@@ -227,6 +227,37 @@ Returns t if approved, nil if declined."
 
 ;;; ---------- Send ----------
 
+(defun copilot-agent-ui--refresh-context (session)
+  "Update SESSION to reflect the most recently focused file buffer.
+Iterates `buffer-list' (MRU order) for the first live file-visiting
+buffer that is not the agent chat buffer itself, then updates:
+  :context-buffer — used by the tool resolver for relative/absolute paths
+  :system-prompt  — rebuilt with the new \"Current file:\" line so the LLM
+                    generates paths for the correct file rather than the one
+                    that was active when the session was first created."
+  (let ((src (cl-find-if
+              (lambda (b)
+                (and (not (eq b (current-buffer)))
+                     (buffer-live-p b)
+                     (buffer-file-name b)))
+              (buffer-list))))
+    (when (and src (not (eq src (plist-get session :context-buffer))))
+      (plist-put session :context-buffer src)
+      (copilot-agent-tools-set-context src)
+      ;; Update the "Current file:" line in the system prompt so the LLM
+      ;; generates paths for the new file rather than the original one.
+      ;; Only acts when the prompt already contains the marker (i.e. when
+      ;; copilot-agent-auto-context was t at session-creation time).
+      (let ((prompt (plist-get session :system-prompt))
+            (file   (or (file-remote-p (buffer-file-name src) 'localname)
+                        (buffer-file-name src))))
+        (when (and prompt file (string-match-p "Current file:" prompt))
+          (plist-put session :system-prompt
+                     (replace-regexp-in-string
+                      "Current file:.*"
+                      (concat "Current file: " file)
+                      prompt)))))))
+
 (defun copilot-agent-ui-send ()
   "Send the current input to the active agent session."
   (interactive)
@@ -237,6 +268,9 @@ Returns t if approved, nil if declined."
         (user-error "Please enter a message"))
       (unless session
         (user-error "No active session — use M-x copilot-agent to start one"))
+      ;; Always re-anchor to the most recently visited file buffer so the
+      ;; user does not need to start a new session after switching files.
+      (copilot-agent-ui--refresh-context session)
       (copilot-agent-ui-insert-user-message input)
       (copilot-agent-ui--clear-input)
       (copilot-agent-ui--show-thinking)
