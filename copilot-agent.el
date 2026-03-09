@@ -4,7 +4,7 @@
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: ai llm agent tools copilot
-;; URL: https://github.com/your-org/emacs-copilot-agent
+;; URL: https://github.com/yuankuns/emacs-copilot-agent
 
 ;;; Commentary:
 ;; An Emacs AI coding agent similar to VSCode Copilot Chat.
@@ -47,6 +47,7 @@
   :type '(choice (const :tag "Anthropic Claude"       anthropic)
                  (const :tag "Google Gemini"          gemini)
                  (const :tag "Alibaba Qwen (free)"    qwen)
+                 (const :tag "GitHub Copilot"         github-copilot)
                  (symbol :tag "Other"))
   :group 'copilot-agent)
 

@@ -39,7 +39,7 @@ automatically.
 **1. Clone the repository**
 
 ```bash
-git clone https://github.com/your-org/emacs-copilot-agent.git \
+git clone https://github.com/yuankuns/emacs-copilot-agent.git \
     ~/.emacs.d/emacs-copilot-agent
 ```
 
@@ -72,6 +72,12 @@ git clone https://github.com/your-org/emacs-copilot-agent.git \
   ```elisp
   (setq copilot-agent-provider 'qwen)
   ```
+- **GitHub Copilot** (requires Copilot subscription, no API key) — run
+  `M-x copilot-agent-github-copilot-login` once and follow the browser prompt,
+  then set:
+  ```elisp
+  (setq copilot-agent-provider 'github-copilot)
+  ```
 
 **4. Open the chat**
 
@@ -87,7 +93,7 @@ M-x copilot-agent
 |---|---|
 | Emacs | 27.1 or later |
 | curl | any recent version (used for HTTP) |
-| An API key or free account | Anthropic, Gemini, or Qwen |
+| An API key or free account | Anthropic, Gemini, Qwen, or GitHub Copilot |
 
 ---
 
@@ -96,7 +102,7 @@ M-x copilot-agent
 ### Manual
 
 ```bash
-git clone https://github.com/your-org/emacs-copilot-agent.git \
+git clone https://github.com/yuankuns/emacs-copilot-agent.git \
     ~/.emacs.d/emacs-copilot-agent
 ```
 
@@ -113,7 +119,7 @@ Add to `init.el`:
 
 ```elisp
 (use-package copilot-agent
-  :straight (:host github :repo "your-org/emacs-copilot-agent"
+  :straight (:host github :repo "yuankuns/emacs-copilot-agent"
              :files ("*.el" "providers/*.el"))
   :config
   (copilot-agent-setup-keybindings))
@@ -179,6 +185,26 @@ Then in `init.el`:
    then return to Emacs.  Tokens are saved to `~/.qwen/oauth_creds.json`
    and auto-refreshed.  Free tier: 2 000 requests/day.
 
+### GitHub Copilot (requires active Copilot subscription, no API key)
+
+1. In `init.el`:
+   ```elisp
+   (setq copilot-agent-provider 'github-copilot)
+   ```
+2. Run once inside Emacs:
+   ```
+   M-x copilot-agent-github-copilot-login
+   ```
+   A browser window opens to `github.com/login/device`; the one-time code
+   is copied to your clipboard.  After approval, the token is saved to
+   `~/.emacs-copilot-agent/github_copilot_creds.json`.  Short-lived session
+   tokens (~30 min) are fetched and refreshed automatically.
+3. Browse available models (GPT-4o, Claude, Gemini, …):
+   ```
+   M-x copilot-agent-select-model
+   ```
+   Or list models for your subscription: `M-x copilot-agent-github-copilot-list-models`
+
 ---
 
 ## API Key Security
@@ -204,13 +230,17 @@ All settings live under the `copilot-agent` customisation group
 (`M-x customize-group RET copilot-agent RET`).  Common variables:
 
 ```elisp
-;; Provider: 'anthropic (default), 'gemini, or 'qwen
+;; Provider: 'anthropic (default), 'gemini, 'qwen, or 'github-copilot
 (setq copilot-agent-provider 'anthropic)
 
-;; Model overrides (optional — providers have sensible defaults)
-;; (setq copilot-agent-anthropic-default-model "claude-opus-4-6")
-;; (setq copilot-agent-gemini-default-model    "gemini-2.0-pro")
-;; (setq copilot-agent-qwen-default-model      "coder-model")  ; or "vision-model"
+;; Default model (overrides the provider's built-in default)
+;; Anthropic default:       "claude-sonnet-4-6"
+;; Gemini default:          "gemini-2.0-flash"
+;; Qwen default:            "coder-model"
+;; GitHub Copilot default:  "gpt-4o"  (use M-x copilot-agent-select-model to browse)
+;; (setq copilot-agent-anthropic-default-model      "claude-opus-4-6")
+;; (setq copilot-agent-gemini-default-model         "gemini-2.0-pro")
+;; (setq copilot-agent-github-copilot-default-model "claude-3.7-sonnet")
 
 ;; Include the current buffer's file path in the system prompt
 (setq copilot-agent-auto-context t)   ; default: t
@@ -268,6 +298,7 @@ to the directory of your current buffer (including remote paths via TRAMP).
 | `C-c / a` | `copilot-agent` — open chat |
 | `C-c / e` | `copilot-agent-explain-region` — explain selection |
 | `C-c / f` | `copilot-agent-fix-errors` — fix compile/flycheck errors |
+| `C-c / m` | `copilot-agent-select-model` — switch provider/model |
 | `C-c / n` | `copilot-agent-new-chat` — fresh session |
 
 ### Explain a region
@@ -423,9 +454,10 @@ emacs-copilot-agent/
 ├── copilot-agent-ui.el         Chat buffer, rendering, input, approval UI
 ├── copilot-agent-status.el     Model/status line helpers
 ├── providers/
-│   ├── copilot-agent-anthropic.el   Anthropic Claude backend
-│   ├── copilot-agent-gemini.el      Google Gemini backend
-│   └── copilot-agent-qwen.el        Alibaba Qwen backend (free OAuth)
+│   ├── copilot-agent-anthropic.el       Anthropic Claude backend
+│   ├── copilot-agent-gemini.el          Google Gemini backend
+│   ├── copilot-agent-qwen.el            Alibaba Qwen backend (free OAuth)
+│   └── copilot-agent-github-copilot.el  GitHub Copilot backend (OAuth device flow)
 └── test/
     ├── run-tests.el                  Test runner (all suites)
     ├── test-copilot-agent-tools.el   Tool tests
