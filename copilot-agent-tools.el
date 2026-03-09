@@ -102,10 +102,19 @@ Returns file:line:match triples, capped at 200 lines.")
 
 (defun copilot-agent-tools--resolve (path)
   "Resolve PATH relative to context directory.
-Absolute and TRAMP paths pass through unchanged."
-  (if (file-name-absolute-p path)
-      path
-    (expand-file-name path (copilot-agent-tools--ctx-dir))))
+TRAMP paths pass through unchanged.  Local-absolute paths are anchored
+to the remote host when the context directory is itself remote (so the
+LLM does not need to produce TRAMP syntax).  Relative paths are
+expanded against the context directory."
+  (cond
+   ;; Already a TRAMP path — use as-is
+   ((and (featurep 'tramp) (tramp-tramp-file-p path)) path)
+   ;; Local-absolute path with a remote context — prepend remote prefix
+   ((file-name-absolute-p path)
+    (let ((remote (file-remote-p (copilot-agent-tools--ctx-dir))))
+      (if remote (concat remote path) path)))
+   ;; Relative path — expand against context directory (TRAMP-aware)
+   (t (expand-file-name path (copilot-agent-tools--ctx-dir)))))
 
 ;;; ---------- TRAMP Utilities ----------
 
