@@ -33,6 +33,7 @@
 (require 'copilot-agent-tools)
 (require 'copilot-agent-api)
 (require 'copilot-agent-ui)
+(require 'copilot-agent-status)
 
 ;;; ---------- Customisation ----------
 
@@ -223,6 +224,7 @@ commands target the right directory (including remote SSH via TRAMP)."
     (define-key map (kbd "e") #'copilot-agent-explain-region)
     (define-key map (kbd "f") #'copilot-agent-fix-errors)
     (define-key map (kbd "n") #'copilot-agent-new-chat)
+    (define-key map (kbd "s") #'copilot-agent-status)
     map)
   "Keymap for copilot-agent commands.")
 
