@@ -65,6 +65,15 @@ for your subscription, then set this to any model ID from that list."
 (defvar copilot-agent-github-copilot--session-expires 0
   "Unix timestamp (float) at which the cached session token expires.")
 
+;;; ---------- Model list cache ----------
+
+(defconst copilot-agent-github-copilot--models-cache-file
+  (expand-file-name "~/.emacs-copilot-agent/github_copilot_models.json")
+  "Path where the fetched Copilot model list is persisted.")
+
+(defvar copilot-agent-github-copilot--models-cache nil
+  "In-memory cache of available model ID strings.")
+
 ;;; ---------- Synchronous HTTP helpers ----------
 
 (defun copilot-agent-github-copilot--post-form (url params)
@@ -205,17 +214,16 @@ one-time code to approve access.  The GitHub OAuth token is saved to
                    copilot-agent-github-copilot--creds-file)
         (error "GitHub Copilot login timed out.  Run M-x copilot-agent-github-copilot-login again.")))))
 
-;;; ---------- List Available Models ----------
+;;; ---------- Model List (cached) ----------
 
-;;;###autoload
-(defun copilot-agent-github-copilot-list-models ()
-  "Fetch and display the models available for your Copilot subscription."
-  (interactive)
-  (let* ((session-token (copilot-agent-github-copilot--valid-session-token))
-         (url           (concat copilot-agent-github-copilot--api-base "/models"))
+(defun copilot-agent-github-copilot--fetch-models ()
+  "Fetch available models from the Copilot API.
+Returns a list of model ID strings and persists them to disk."
+  (let* ((token (copilot-agent-github-copilot--valid-session-token))
+         (url   (concat copilot-agent-github-copilot--api-base "/models"))
          (url-request-method "GET")
          (url-request-extra-headers
-          `(("Authorization"          . ,(concat "Bearer " session-token))
+          `(("Authorization"          . ,(concat "Bearer " token))
             ("Copilot-Integration-Id" . "vscode-chat")
             ("Editor-Version"         . "vscode/1.85.0")
             ("Accept"                 . "application/json")))
@@ -227,21 +235,63 @@ one-time code to approve access.  The GitHub OAuth token is saved to
                          (re-search-forward "^\r?$" nil t)
                          (json-read))
                      (kill-buffer buf)))
-           (models (cdr (assq 'data data))))
-      (if (and models (> (length models) 0))
-          (with-output-to-temp-buffer "*Copilot Models*"
-            (princ "Available GitHub Copilot models:\n")
-            (princ "(set with: (setq copilot-agent-github-copilot-default-model \"MODEL-ID\"))\n\n")
-            (seq-doseq (m models)
-              (let* ((id   (cdr (assq 'id           m)))
-                     (name (cdr (assq 'name         m)))
-                     (caps (cdr (assq 'capabilities m)))
-                     (tc   (and caps (cdr (assq 'supports_tool_calls caps)))))
-                (princ (format "  %-45s %s%s\n"
-                               id
-                               (or name "")
-                               (if (eq tc t) "  [tool-calls]" ""))))))
-        (message "No models returned — check your Copilot subscription.")))))
+           (models (cdr (assq 'data data)))
+           (ids    (when (and models (vectorp models))
+                     (mapcar (lambda (m) (cdr (assq 'id m)))
+                             (append models nil)))))
+      (when ids
+        ;; Persist to disk
+        (make-directory (file-name-directory copilot-agent-github-copilot--models-cache-file) t)
+        (with-temp-file copilot-agent-github-copilot--models-cache-file
+          (insert (json-encode (vconcat ids))))
+        (setq copilot-agent-github-copilot--models-cache ids))
+      ids)))
+
+(defun copilot-agent-github-copilot--list-models ()
+  "Return available Copilot model IDs, using cache or auto-fetching on first call.
+Returns nil silently if not yet authenticated."
+  (or copilot-agent-github-copilot--models-cache
+      ;; Try disk cache first
+      (when (file-exists-p copilot-agent-github-copilot--models-cache-file)
+        (condition-case _
+            (let ((ids (append (json-read-file copilot-agent-github-copilot--models-cache-file) nil)))
+              (setq copilot-agent-github-copilot--models-cache ids)
+              ids)
+          (error nil)))
+      ;; Auto-fetch if credentials are present
+      (when (copilot-agent-github-copilot--load-github-token)
+        (condition-case _
+            (copilot-agent-github-copilot--fetch-models)
+          (error nil)))))
+
+(defun copilot-agent-github-copilot--set-model (model)
+  "Set the active GitHub Copilot model to MODEL."
+  (setq copilot-agent-github-copilot-default-model model))
+
+;;;###autoload
+(defun copilot-agent-github-copilot-list-models ()
+  "Display the models available for your Copilot subscription.
+Fetches from API on first call; subsequent calls use the disk cache.
+To force a refresh, call `copilot-agent-github-copilot-refresh-models'."
+  (interactive)
+  (let ((ids (copilot-agent-github-copilot--list-models)))
+    (if ids
+        (with-output-to-temp-buffer "*Copilot Models*"
+          (princ "Available GitHub Copilot models:\n")
+          (princ "(use M-x copilot-agent-select-model to switch)\n\n")
+          (dolist (id ids)
+            (princ (format "  %s\n" id))))
+      (message "No models found — run M-x copilot-agent-github-copilot-login first."))))
+
+;;;###autoload
+(defun copilot-agent-github-copilot-refresh-models ()
+  "Force a fresh fetch of the GitHub Copilot model list from the API."
+  (interactive)
+  (setq copilot-agent-github-copilot--models-cache nil)
+  (let ((ids (condition-case e
+                 (copilot-agent-github-copilot--fetch-models)
+               (error (user-error "%s" (error-message-string e))))))
+    (message "Fetched %d GitHub Copilot models." (length ids))))
 
 ;;; ---------- Tool Schema Formatting ----------
 ;; GitHub Copilot uses the OpenAI function-calling format.
@@ -402,7 +452,9 @@ CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING)."
          :default-model-fn    (lambda () copilot-agent-github-copilot-default-model)
          :send-fn             #'copilot-agent-github-copilot-send
          :make-tool-result-fn #'copilot-agent-github-copilot-make-tool-result-message
-         :format-tools-fn     #'copilot-agent-github-copilot--format-tools)))
+         :format-tools-fn     #'copilot-agent-github-copilot--format-tools
+         :list-models-fn      #'copilot-agent-github-copilot--list-models
+         :set-model-fn        #'copilot-agent-github-copilot--set-model)))
 
 (provide 'copilot-agent-github-copilot)
 ;;; copilot-agent-github-copilot.el ends here

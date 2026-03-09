@@ -696,6 +696,19 @@ TOOL-RESULTS is a list of plists: (:tool-use-id ID :content RESULT-STRING)."
                         (response . ((result . ,(plist-get r :content))))))))
                 tool-results)))))
 
+;;; ---------- Model List ----------
+
+(defun copilot-agent-gemini--list-models ()
+  "Return the list of known Gemini model IDs."
+  '("gemini-2.0-flash"
+    "gemini-2.0-pro"
+    "gemini-1.5-pro"
+    "gemini-1.5-flash"))
+
+(defun copilot-agent-gemini--set-model (model)
+  "Set the active Gemini model to MODEL."
+  (setq copilot-agent-gemini-default-model model))
+
 ;;; ---------- Provider Registration ----------
 
 (with-eval-after-load 'copilot-agent-api
@@ -706,7 +719,9 @@ TOOL-RESULTS is a list of plists: (:tool-use-id ID :content RESULT-STRING)."
          :default-model-fn      (lambda () copilot-agent-gemini-default-model)
          :send-fn               #'copilot-agent-gemini-send
          :make-tool-result-fn   #'copilot-agent-gemini-make-tool-result-message
-         :format-tools-fn       #'copilot-agent-gemini--format-tools)))
+         :format-tools-fn       #'copilot-agent-gemini--format-tools
+         :list-models-fn        #'copilot-agent-gemini--list-models
+         :set-model-fn          #'copilot-agent-gemini--set-model)))
 
 (provide 'copilot-agent-gemini)
 ;;; copilot-agent-gemini.el ends here

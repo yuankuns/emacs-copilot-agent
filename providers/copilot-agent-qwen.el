@@ -366,6 +366,16 @@ OpenAI-compatible APIs require one {\"role\":\"tool\"} message per tool call."
               (content      . ,(plist-get r :content))))
           tool-results))
 
+;;; ---------- Model List ----------
+
+(defun copilot-agent-qwen--list-models ()
+  "Return the list of known Qwen portal model IDs."
+  '("coder-model" "vision-model"))
+
+(defun copilot-agent-qwen--set-model (model)
+  "Set the active Qwen model to MODEL."
+  (setq copilot-agent-qwen-default-model model))
+
 ;;; ---------- Provider Registration ----------
 
 (with-eval-after-load 'copilot-agent-api
@@ -376,7 +386,9 @@ OpenAI-compatible APIs require one {\"role\":\"tool\"} message per tool call."
          :default-model-fn    (lambda () copilot-agent-qwen-default-model)
          :send-fn             #'copilot-agent-qwen-send
          :make-tool-result-fn #'copilot-agent-qwen-make-tool-result-message
-         :format-tools-fn     #'copilot-agent-qwen--format-tools)))
+         :format-tools-fn     #'copilot-agent-qwen--format-tools
+         :list-models-fn      #'copilot-agent-qwen--list-models
+         :set-model-fn        #'copilot-agent-qwen--set-model)))
 
 (provide 'copilot-agent-qwen)
 ;;; copilot-agent-qwen.el ends here
