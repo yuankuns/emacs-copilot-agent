@@ -230,16 +230,15 @@ Returns a list of model ID strings and persists them to disk."
                         "Copilot-Integration-Id: vscode-chat"
                         "Editor-Version: vscode/1.85.0")))
          (models (cdr (assq 'data data)))
-           (ids    (when (and models (vectorp models))
-                     (mapcar (lambda (m) (cdr (assq 'id m)))
-                             (append models nil)))))
-      (when ids
-        ;; Persist to disk
-        (make-directory (file-name-directory copilot-agent-github-copilot--models-cache-file) t)
-        (with-temp-file copilot-agent-github-copilot--models-cache-file
-          (insert (json-encode (vconcat ids))))
-        (setq copilot-agent-github-copilot--models-cache ids))
-      ids)))
+         (ids    (when (and models (vectorp models))
+                   (mapcar (lambda (m) (cdr (assq 'id m)))
+                           (append models nil)))))
+    (when ids
+      (make-directory (file-name-directory copilot-agent-github-copilot--models-cache-file) t)
+      (with-temp-file copilot-agent-github-copilot--models-cache-file
+        (insert (json-encode (vconcat ids))))
+      (setq copilot-agent-github-copilot--models-cache ids))
+    ids))
 
 (defun copilot-agent-github-copilot--list-models ()
   "Return available Copilot model IDs, using cache or auto-fetching on first call.
