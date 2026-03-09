@@ -198,7 +198,11 @@ CALLBACKS plist keys (all optional):
     (funcall send-fn session
              (lambda (response http-error)
                (if http-error
-                   (when on-error (funcall on-error http-error))
+                   (progn
+                     (when (fboundp 'copilot-agent-status-record-error)
+                       (copilot-agent-status-record-error
+                        (plist-get session :provider) http-error))
+                     (when on-error (funcall on-error http-error)))
                  (copilot-agent-api--handle-response response session callbacks))))))
 
 (defun copilot-agent-api--handle-response (response session callbacks)

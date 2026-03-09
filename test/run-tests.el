@@ -41,6 +41,7 @@
 (load "test-copilot-agent-api"        nil t)
 (load "test-copilot-agent-ui"         nil t)
 (load "test-copilot-agent-qwen"       nil t)
+(load "test-copilot-agent-status"     nil t)
 (load "test-regressions"              nil t)
 
 ;; Print summary and exit with appropriate code
