@@ -215,6 +215,42 @@ right after the two '> ' characters."
     (copilot-agent-ui-insert-tool-result "shell_command" "file1.txt\nfile2.txt")
     (should (string-search "file1.txt" (buffer-string)))))
 
+(ert-deftest ui/insert-tool-result-short-result-fully-displayed ()
+  "Results with fewer lines than the limit are shown in full without truncation."
+  (with-fresh-chat-buffer
+    (let ((copilot-agent-tool-result-max-lines 5))
+      (copilot-agent-ui-insert-tool-result "read_file" "line1\nline2\nline3")
+      (let ((str (buffer-string)))
+        (should (string-search "line1" str))
+        (should (string-search "line2" str))
+        (should (string-search "line3" str))
+        (should-not (string-search "more lines" str))))))
+
+(ert-deftest ui/insert-tool-result-long-result-truncated ()
+  "Results exceeding the limit show only the first N lines plus a count footer."
+  (with-fresh-chat-buffer
+    (let ((copilot-agent-tool-result-max-lines 3))
+      (copilot-agent-ui-insert-tool-result
+       "read_file"
+       "line1\nline2\nline3\nline4\nline5\nline6")
+      (let ((str (buffer-string)))
+        ;; First 3 lines visible
+        (should (string-search "line1" str))
+        (should (string-search "line2" str))
+        (should (string-search "line3" str))
+        ;; Lines beyond the limit are hidden
+        (should-not (string-search "line4" str))
+        ;; Footer shows the count of hidden lines
+        (should (string-search "3 more lines" str))))))
+
+(ert-deftest ui/insert-tool-result-trailing-newline-not-counted ()
+  "A trailing newline in the result must not inflate the line count."
+  (with-fresh-chat-buffer
+    (let ((copilot-agent-tool-result-max-lines 5))
+      ;; 3 lines of content plus a trailing newline — should NOT show truncation.
+      (copilot-agent-ui-insert-tool-result "shell_command" "a\nb\nc\n")
+      (should-not (string-search "more lines" (buffer-string))))))
+
 (ert-deftest ui/insert-error-shows-message ()
   "insert-error renders the error message."
   (with-fresh-chat-buffer
