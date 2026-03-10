@@ -602,11 +602,14 @@ Returns plist with :text :tool-calls :stop-reason :raw-content :error."
           ;; Store the ORIGINAL Gemini parts as raw-content so that thoughtSignature
           ;; fields on functionCall parts are preserved when history is replayed.
           ;; convert-message detects native Gemini parts and passes them through unchanged.
-          (let ((ordered-calls (nreverse tool-calls)))
-            (list :text        text
-                  :tool-calls  ordered-calls
-                  :stop-reason finish
-                  :raw-content (if (vectorp parts) parts (vconcat parts))))))
+          (let* ((ordered-calls (nreverse tool-calls))
+                 (meta          (cdr (assq 'usageMetadata data)))
+                 (input-tokens  (and meta (cdr (assq 'promptTokenCount meta)))))
+            (list :text         text
+                  :tool-calls   ordered-calls
+                  :stop-reason  finish
+                  :raw-content  (if (vectorp parts) parts (vconcat parts))
+                  :input-tokens input-tokens))))
     (error (list :error (format "Parse error: %s" (error-message-string err))))))
 
 ;;; ---------- Provider Send Function ----------
@@ -717,6 +720,7 @@ TOOL-RESULTS is a list of plists: (:tool-use-id ID :content RESULT-STRING)."
    (list :display-name          "Google Gemini"
          :default-model         copilot-agent-gemini-default-model
          :default-model-fn      (lambda () copilot-agent-gemini-default-model)
+         :context-window        1000000
          :send-fn               #'copilot-agent-gemini-send
          :make-tool-result-fn   #'copilot-agent-gemini-make-tool-result-message
          :format-tools-fn       #'copilot-agent-gemini--format-tools

@@ -166,6 +166,83 @@ otherwise prompts in the minibuffer with [y]es / [a]ll / [n]o."
                    (?n nil))))))
         approved)))
 
+;;; ---------- Context Compaction ----------
+
+(defcustom copilot-agent-compact-threshold 0.95
+  "Fraction of the provider context window at which history compaction triggers.
+When input token usage exceeds this fraction of the model's context window,
+the middle portion of the conversation history is summarised and replaced with
+a single summary message, keeping the first user message and the most recent
+`copilot-agent-compact-tail-messages' messages verbatim."
+  :type 'float
+  :group 'copilot-agent)
+
+(defcustom copilot-agent-compact-tail-messages 6
+  "Number of most-recent messages to preserve verbatim during compaction.
+The first user message is always kept regardless of this setting."
+  :type 'integer
+  :group 'copilot-agent)
+
+(defun copilot-agent-api--compact (session callbacks continue-fn)
+  "Summarise the middle of SESSION history, then call CONTINUE-FN.
+Keeps the first user message and the last `copilot-agent-compact-tail-messages'
+messages intact; summarises everything in between via an extra LLM call."
+  (let* ((msgs       (plist-get session :messages))
+         (n          (max 0 copilot-agent-compact-tail-messages))
+         (tail-start (max 1 (- (length msgs) n)))
+         (first      (list (car msgs)))
+         (middle     (seq-subseq msgs 1 tail-start))
+         (tail       (seq-subseq msgs tail-start))
+         (on-compact (plist-get callbacks :on-compacting)))
+    (if (null middle)
+        ;; Nothing to summarise — proceed as-is.
+        (funcall continue-fn)
+      (when on-compact (funcall on-compact))
+      ;; Build a minimal summary session: no tools, no approval needed.
+      (let* ((provider-id (plist-get session :provider))
+             (provider    (copilot-agent-api--get-provider provider-id))
+             (send-fn     (plist-get provider :send-fn))
+             (sum-session
+              (list :provider      provider-id
+                    :model         (plist-get session :model)
+                    :messages      (append
+                                    first middle
+                                    (list '((role . "user")
+                                            (content . "Summarise our conversation so far in detail, preserving all important context, decisions, file contents, and code. Be thorough — this summary will replace the conversation history."))))
+                    :system-prompt (plist-get session :system-prompt)
+                    :max-tokens    4096
+                    :tools         nil
+                    :approve-all   t)))
+        (funcall send-fn sum-session
+                 (lambda (sum-response http-error)
+                   (if http-error
+                       (progn
+                         (message "copilot-agent: compaction failed (%s), continuing without it"
+                                  http-error)
+                         (funcall continue-fn))
+                     (let ((summary (plist-get sum-response :text)))
+                       (plist-put session :messages
+                                  (append
+                                   first
+                                   (list `((role . "assistant")
+                                           (content . ,(format "[Conversation summary]\n%s"
+                                                               summary))))
+                                   tail))
+                       ;; Reset token count — it will be updated on next response.
+                       (plist-put session :last-input-tokens nil)
+                       (funcall continue-fn)))))))))
+
+(defun copilot-agent-api--maybe-compact (session callbacks continue-fn)
+  "Compact SESSION history if token usage exceeds threshold, then call CONTINUE-FN."
+  (let* ((provider-id (plist-get session :provider))
+         (provider    (copilot-agent-api--get-provider provider-id))
+         (ctx-window  (plist-get provider :context-window))
+         (used        (plist-get session :last-input-tokens)))
+    (if (and ctx-window used
+             (>= (/ (float used) ctx-window) copilot-agent-compact-threshold))
+        (copilot-agent-api--compact session callbacks continue-fn)
+      (funcall continue-fn))))
+
 ;;; ---------- Agentic Loop ----------
 
 (defun copilot-agent-api-send (session user-input callbacks)
@@ -217,8 +294,13 @@ CALLBACKS plist keys (all optional):
     ;; Record this assistant turn in history
     (copilot-agent-api--append-message
      session `((role . "assistant") (content . ,raw)))
+    ;; Track input token count for compaction threshold checks
+    (when-let ((tokens (plist-get response :input-tokens)))
+      (plist-put session :last-input-tokens tokens))
     (if (null tool-calls)
-        (when on-done (funcall on-done))
+        ;; End of turn — check if compaction is needed before signalling done.
+        (copilot-agent-api--maybe-compact session callbacks
+                                          (lambda () (when on-done (funcall on-done))))
       (copilot-agent-api--process-tools tool-calls session callbacks))))
 
 (defun copilot-agent-api--process-tools (tool-calls session callbacks)

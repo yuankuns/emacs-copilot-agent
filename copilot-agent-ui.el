@@ -203,13 +203,14 @@ The full result is always sent to the LLM; this only affects display."
 
 ;;; ---------- Thinking indicator ----------
 
-(defun copilot-agent-ui--show-thinking ()
+(defun copilot-agent-ui--show-thinking (&optional label)
   (with-current-buffer (copilot-agent-ui-get-buffer)
     (copilot-agent-ui--hide-thinking)
     (let ((ov (make-overlay (marker-position copilot-agent-ui--history-end-marker)
                             (marker-position copilot-agent-ui--history-end-marker))))
       (overlay-put ov 'after-string
-                   (propertize "\nThinking…\n" 'face 'copilot-agent-thinking-face))
+                   (propertize (format "\n%s\n" (or label "Thinking…"))
+                               'face 'copilot-agent-thinking-face))
       (setq copilot-agent-ui--thinking-overlay ov))))
 
 (defun copilot-agent-ui--hide-thinking ()
@@ -311,6 +312,8 @@ buffer that is not the agent chat buffer itself, then updates:
         :on-tool-result #'copilot-agent-ui-insert-tool-result
         :on-approve     (lambda (name input session)
                           (copilot-agent-ui-approve-tool name input session))
+        :on-compacting  (lambda ()
+                          (copilot-agent-ui--show-thinking "Compacting history…"))
         :on-done        (lambda ()
                           (copilot-agent-ui--hide-thinking)
                           (with-current-buffer (copilot-agent-ui-get-buffer)
