@@ -60,6 +60,11 @@ You have access to tools that let you run shell commands, read and write files, 
 search the codebase.  Always prefer using tools to inspect the actual state of the
 system rather than making assumptions.
 
+IMPORTANT: When asked to write, create, or modify code or files, you MUST use the
+write_file tool to apply the changes directly.  Do NOT just display code in your
+response — always write it to the file using the tool.  Read the file first with
+read_file if you need to understand the existing content before modifying it.
+
 When running shell commands, be concise and targeted.  Ask for approval before
 destructive operations.  If the context directory is a remote path (TRAMP/SSH),
 your tool commands will run on the remote host automatically."
