@@ -115,7 +115,28 @@ Add to `init.el`:
 (require 'copilot-agent)
 ```
 
-### With `use-package` + `straight.el`
+### MELPA (pending review)
+
+Once the MELPA PR is merged:
+
+```
+M-x package-install RET copilot-agent RET
+```
+
+### `package-vc-install` (Emacs 29+, built-in, no extra tools)
+
+```elisp
+(package-vc-install "https://github.com/yuankuns/emacs-copilot-agent")
+```
+
+Installs directly from GitHub master. Add to `init.el` to auto-install on startup:
+
+```elisp
+(unless (package-installed-p 'copilot-agent)
+  (package-vc-install "https://github.com/yuankuns/emacs-copilot-agent"))
+```
+
+### `straight.el`
 
 ```elisp
 (use-package copilot-agent
@@ -123,6 +144,39 @@ Add to `init.el`:
              :files ("*.el" "providers/*.el"))
   :config
   (copilot-agent-setup-keybindings))
+```
+
+### `elpaca`
+
+```elisp
+(use-package copilot-agent
+  :elpaca (:host github :repo "yuankuns/emacs-copilot-agent"
+           :files ("*.el" "providers/*.el"))
+  :config
+  (copilot-agent-setup-keybindings))
+```
+
+### `quelpa`
+
+```elisp
+(quelpa '(copilot-agent :fetcher github
+                        :repo "yuankuns/emacs-copilot-agent"
+                        :files ("*.el" "providers/*.el")))
+```
+
+### Manual
+
+```bash
+git clone https://github.com/yuankuns/emacs-copilot-agent.git \
+    ~/.emacs.d/emacs-copilot-agent
+```
+
+Then add to `init.el`:
+
+```elisp
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent")
+(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent/providers")
+(require 'copilot-agent)
 ```
 
 ---
