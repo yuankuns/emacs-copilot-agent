@@ -201,10 +201,11 @@ commands target the right directory (including remote SSH via TRAMP)."
     (with-current-buffer (copilot-agent-ui-get-buffer)
       (let ((inhibit-read-only t))
         (erase-buffer))
-      (setq copilot-agent-ui--session  session
-            copilot-agent-ui--input-marker nil)
-      (copilot-agent-ui--insert-welcome)
-      (copilot-agent-ui--insert-prompt))
+      (setq copilot-agent-ui--session          session
+            copilot-agent-ui--history-end-marker nil
+            copilot-agent-ui--input-marker       nil
+            copilot-agent-ui--thinking-overlay   nil)
+      (copilot-agent-ui--draw-initial-contents))
     (message "New Copilot Agent session started")))
 
 ;;;###autoload
