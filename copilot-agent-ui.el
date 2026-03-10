@@ -183,14 +183,16 @@ The full result is always sent to the LLM; this only affects display."
          (trimmed (if (string-suffix-p "\n" result)
                       (substring result 0 -1)
                     result))
-         (lines   (split-string trimmed "\n"))
+         ;; An empty result has no lines; avoid split-string returning ("").
+         (lines   (if (string-empty-p trimmed) '() (split-string trimmed "\n")))
          (total   (length lines))
+         (hidden  (- total limit))
          (preview (string-join (seq-take lines limit) "\n")))
     (copilot-agent-ui--history-insert
      (concat preview "\n") 'copilot-agent-tool-result-face)
-    (when (> total limit)
+    (when (> hidden 0)
       (copilot-agent-ui--history-insert
-       (format "  … %d more lines\n" (- total limit))
+       (format "  … %d more %s\n" hidden (if (= hidden 1) "line" "lines"))
        'font-lock-comment-face))))
 
 (defun copilot-agent-ui-insert-error (message)

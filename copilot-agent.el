@@ -234,7 +234,24 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
                (set-fn      (plist-get plist :set-model-fn)))
           (setq copilot-agent-provider provider-id)
           (when set-fn (funcall set-fn model-id))
-          (message "Switched to %s / %s" provider-id model-id))))))
+          ;; Update the live session so the change takes effect immediately.
+          ;; Guard against the chat buffer not existing yet.
+          (let* ((buf          (get-buffer copilot-agent-ui--buffer-name))
+                 (session      (and buf (buffer-local-value
+                                        'copilot-agent-ui--session buf)))
+                 (provider-changed (and session
+                                        (not (eq (plist-get session :provider)
+                                                  provider-id)))))
+            (when session
+              (plist-put session :provider provider-id)
+              (plist-put session :model    model-id))
+            (if provider-changed
+                (message (concat "Switched to %s / %s "
+                                 "(history from previous provider kept — "
+                                 "use C-c C-n for a clean session)")
+                         provider-id model-id)
+              (message "Switched to %s / %s" provider-id model-id))))))))
+
 
 ;;;###autoload
 (defun copilot-agent-clear-history ()
