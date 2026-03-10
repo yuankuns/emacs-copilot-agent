@@ -234,6 +234,12 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
                (set-fn      (plist-get plist :set-model-fn)))
           (setq copilot-agent-provider provider-id)
           (when set-fn (funcall set-fn model-id))
+          ;; Also update the live session so the change takes effect immediately.
+          (when-let ((session (buffer-local-value
+                               'copilot-agent-ui--session
+                               (get-buffer copilot-agent-ui--buffer-name))))
+            (plist-put session :provider provider-id)
+            (plist-put session :model    model-id))
           (message "Switched to %s / %s" provider-id model-id))))))
 
 ;;;###autoload
