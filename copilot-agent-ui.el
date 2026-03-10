@@ -18,6 +18,8 @@
 
 ;;; Code:
 
+(require 'seq)
+(require 'subr-x)
 (require 'copilot-agent-api)
 
 ;;; ---------- Faces ----------
@@ -163,11 +165,33 @@ Always uses the history-end-marker so the separator stays at the bottom."
        (format "  %s: %S\n" (car pair) (cdr pair))
        'font-lock-comment-face))))
 
+(defcustom copilot-agent-tool-result-max-lines 5
+  "Maximum result lines shown in the chat buffer.
+The full result is always sent to the LLM; this only affects display."
+  :type '(integer :validate (lambda (w)
+                               (when (< (widget-value w) 0)
+                                 (widget-put w :error "Must be non-negative")
+                                 w)))
+  :group 'copilot-agent)
+
 (defun copilot-agent-ui-insert-tool-result (name result)
   (copilot-agent-ui--history-insert
    (format "[Result: %s]\n" name) 'copilot-agent-tool-result-face)
-  (copilot-agent-ui--history-insert
-   (concat result "\n") 'copilot-agent-tool-result-face))
+  (let* ((limit   (max 0 copilot-agent-tool-result-max-lines))
+         ;; Strip a single trailing newline before splitting so it is not
+         ;; counted as an extra blank line.
+         (trimmed (if (string-suffix-p "\n" result)
+                      (substring result 0 -1)
+                    result))
+         (lines   (split-string trimmed "\n"))
+         (total   (length lines))
+         (preview (string-join (seq-take lines limit) "\n")))
+    (copilot-agent-ui--history-insert
+     (concat preview "\n") 'copilot-agent-tool-result-face)
+    (when (> total limit)
+      (copilot-agent-ui--history-insert
+       (format "  … %d more lines\n" (- total limit))
+       'font-lock-comment-face))))
 
 (defun copilot-agent-ui-insert-error (message)
   (copilot-agent-ui--history-insert
