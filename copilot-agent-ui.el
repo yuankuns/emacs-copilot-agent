@@ -308,8 +308,12 @@ buffer that is not the agent chat buffer itself, then updates:
         :on-text        (lambda (text)
                           (copilot-agent-ui--hide-thinking)
                           (copilot-agent-ui-insert-assistant-text text))
-        :on-tool-call   #'copilot-agent-ui-insert-tool-call
-        :on-tool-result #'copilot-agent-ui-insert-tool-result
+        :on-tool-call   (lambda (name input)
+                          (copilot-agent-ui-insert-tool-call name input)
+                          (copilot-agent-ui--show-thinking "Running…"))
+        :on-tool-result (lambda (name result)
+                          (copilot-agent-ui--hide-thinking)
+                          (copilot-agent-ui-insert-tool-result name result))
         :on-approve     (lambda (name input session)
                           (copilot-agent-ui-approve-tool name input session))
         :on-compacting  (lambda ()
