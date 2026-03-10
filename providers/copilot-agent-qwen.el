@@ -332,7 +332,7 @@ Returns plist with :text :tool-calls :stop-reason :raw-content :error."
                     :tool-calls   ordered
                     :stop-reason  finish
                     :raw-content  raw-content
-                    :input-tokens input-tokens))))
+                    :input-tokens input-tokens)))))
     (error (list :error (format "Parse error: %s" (error-message-string err))))))
 
 ;;; ---------- Provider Send Function ----------
