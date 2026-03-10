@@ -344,5 +344,162 @@
              :on-error       (lambda (e) (error "Unexpected: %s" e))))
       (should (string-match-p "[Dd]eclined" result-text)))))
 
+;;; ---------- Context Compaction ----------
+
+(defun api-test--make-compact-stub (summary-text)
+  "Provider that returns SUMMARY-TEXT on any call (used as summary provider)."
+  (list :display-name        "CompactStub"
+        :default-model       "m"
+        :context-window      1000
+        :send-fn             (lambda (_session callback)
+                               (funcall callback
+                                        (list :text         summary-text
+                                              :tool-calls   nil
+                                              :stop-reason  "end_turn"
+                                              :raw-content  (vector `((type . "text") (text . ,summary-text)))
+                                              :input-tokens 50)
+                                        nil))
+        :make-tool-result-fn (lambda (_) nil)
+        :format-tools-fn     #'identity))
+
+(defun api-test--session-with-messages (provider-id messages)
+  "Create a session for PROVIDER-ID pre-populated with MESSAGES."
+  (let ((s (copilot-agent-api-new-session provider-id)))
+    (dolist (m messages)
+      (copilot-agent-api--append-message s m))
+    s))
+
+(ert-deftest api/maybe-compact-skips-when-no-token-data ()
+  "maybe-compact calls continue-fn immediately when :last-input-tokens is nil."
+  (copilot-agent-api-register-provider 'compact-stub-1
+                                        (api-test--make-compact-stub "summary"))
+  (let* ((s        (copilot-agent-api-new-session 'compact-stub-1))
+         (called   nil))
+    ;; No :last-input-tokens set on session
+    (copilot-agent-api--maybe-compact s '() (lambda () (setq called t)))
+    (should called)))
+
+(ert-deftest api/maybe-compact-skips-below-threshold ()
+  "maybe-compact calls continue-fn without compacting when usage is below threshold."
+  (copilot-agent-api-register-provider 'compact-stub-2
+                                        (api-test--make-compact-stub "summary"))
+  (let* ((s      (copilot-agent-api-new-session 'compact-stub-2))
+         (called nil)
+         (copilot-agent-compact-threshold 0.95))
+    ;; 500/1000 = 50% < 95%
+    (plist-put s :last-input-tokens 500)
+    (copilot-agent-api--maybe-compact s '() (lambda () (setq called t)))
+    (should called)
+    ;; Messages must be untouched (no compaction happened)
+    (should (null (plist-get s :messages)))))
+
+(ert-deftest api/maybe-compact-triggers-above-threshold ()
+  "maybe-compact triggers compaction when usage meets or exceeds threshold."
+  (copilot-agent-api-register-provider 'compact-stub-3
+                                        (api-test--make-compact-stub "THE SUMMARY"))
+  (let* ((s      (api-test--session-with-messages
+                  'compact-stub-3
+                  (list '((role . "user")      (content . "task"))
+                        '((role . "assistant") (content . "msg1"))
+                        '((role . "user")      (content . "msg2"))
+                        '((role . "assistant") (content . "msg3"))
+                        '((role . "user")      (content . "msg4"))
+                        '((role . "assistant") (content . "msg5"))
+                        '((role . "user")      (content . "msg6"))
+                        '((role . "assistant") (content . "msg7")))))
+         (done   nil)
+         (copilot-agent-compact-threshold 0.95)
+         (copilot-agent-compact-tail-messages 2))
+    ;; 960/1000 = 96% > 95%
+    (plist-put s :last-input-tokens 960)
+    (copilot-agent-api--maybe-compact s '() (lambda () (setq done t)))
+    (should done)
+    ;; After compaction, :last-input-tokens must be reset
+    (should (null (plist-get s :last-input-tokens)))))
+
+(ert-deftest api/compact-preserves-first-and-tail ()
+  "compact keeps the first user message and the last N messages, summarises the middle."
+  (copilot-agent-api-register-provider 'compact-stub-4
+                                        (api-test--make-compact-stub "SUMMARY TEXT"))
+  (let* ((msgs   (list '((role . "user")      (content . "FIRST"))
+                       '((role . "assistant") (content . "a"))
+                       '((role . "user")      (content . "b"))
+                       '((role . "assistant") (content . "c"))
+                       '((role . "user")      (content . "TAIL-1"))
+                       '((role . "assistant") (content . "TAIL-2"))))
+         (s      (api-test--session-with-messages 'compact-stub-4 msgs))
+         (copilot-agent-compact-tail-messages 2))
+    (copilot-agent-api--compact s '() (lambda () nil))
+    (let* ((result (plist-get s :messages))
+           (first  (car result))
+           (summary (cadr result))
+           (tail   (cddr result)))
+      ;; First message preserved verbatim
+      (should (equal (cdr (assq 'content first)) "FIRST"))
+      ;; Summary message is present
+      (should (string-match-p "SUMMARY TEXT" (cdr (assq 'content summary))))
+      ;; Tail is the last 2 messages
+      (should (= (length tail) 2))
+      (should (equal (cdr (assq 'content (car tail)))  "TAIL-1"))
+      (should (equal (cdr (assq 'content (cadr tail))) "TAIL-2")))))
+
+(ert-deftest api/compact-no-middle-skips-summary ()
+  "compact calls continue-fn without an LLM call when there is no middle to summarise."
+  (copilot-agent-api-register-provider 'compact-stub-5
+                                        (api-test--make-compact-stub "SHOULD NOT APPEAR"))
+  (let* ((msgs     (list '((role . "user") (content . "FIRST"))
+                         '((role . "user") (content . "TAIL"))))
+         (s        (api-test--session-with-messages 'compact-stub-5 msgs))
+         (done     nil)
+         ;; tail-messages = 1 → tail-start = max(1, 2-1) = 1 → middle = msgs[1..1] = nil
+         (copilot-agent-compact-tail-messages 1))
+    (copilot-agent-api--compact s '() (lambda () (setq done t)))
+    (should done)
+    ;; Messages must be completely unchanged
+    (should (= (length (plist-get s :messages)) 2))))
+
+(ert-deftest api/compact-failure-falls-back-gracefully ()
+  "compact logs and calls continue-fn when the summary LLM call fails."
+  (copilot-agent-api-register-provider
+   'compact-fail-stub
+   (list :display-name        "FailStub"
+         :default-model       "m"
+         :context-window      1000
+         :send-fn             (lambda (_s cb) (funcall cb nil "HTTP 500: failure"))
+         :make-tool-result-fn (lambda (_) nil)
+         :format-tools-fn     #'identity))
+  (let* ((msgs  (list '((role . "user")      (content . "FIRST"))
+                      '((role . "assistant") (content . "middle"))
+                      '((role . "user")      (content . "tail"))))
+         (s     (api-test--session-with-messages 'compact-fail-stub msgs))
+         (done  nil)
+         (copilot-agent-compact-tail-messages 1))
+    (copilot-agent-api--compact s '() (lambda () (setq done t)))
+    (should done)
+    ;; Messages must be unchanged after failure
+    (should (= (length (plist-get s :messages)) 3))))
+
+(ert-deftest api/send-records-input-tokens ()
+  "api-send stores :input-tokens from the response into :last-input-tokens."
+  (copilot-agent-api-register-provider
+   'token-stub
+   (list :display-name        "TokenStub"
+         :default-model       "m"
+         :context-window      10000
+         :send-fn             (lambda (_s cb)
+                                (funcall cb
+                                         (list :text "reply" :tool-calls nil
+                                               :stop-reason "end_turn"
+                                               :raw-content (vector '((type . "text") (text . "reply")))
+                                               :input-tokens 1234)
+                                         nil))
+         :make-tool-result-fn (lambda (_) nil)
+         :format-tools-fn     #'identity))
+  (let ((s (copilot-agent-api-new-session 'token-stub)))
+    (copilot-agent-api-send s "hi"
+                            (list :on-done    (lambda () nil)
+                                  :on-approve (lambda (_n _i _s) t)))
+    (should (= (plist-get s :last-input-tokens) 1234))))
+
 (provide 'test-copilot-agent-api)
 ;;; test-copilot-agent-api.el ends here
