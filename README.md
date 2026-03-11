@@ -99,6 +99,85 @@ M-x copilot-agent
 
 ## Installation
 
+### MELPA (pending review)
+
+First make sure MELPA is in your `package-archives` (add to `init.el` if not already there):
+
+```elisp
+(require 'package)
+(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+(package-initialize)
+```
+
+Once the MELPA PR is merged:
+
+```
+M-x package-install RET copilot-agent RET
+```
+
+### `package-vc-install` (Emacs 29+, built-in, no extra tools)
+
+```elisp
+(package-vc-install "https://github.com/yuankuns/emacs-copilot-agent")
+```
+
+To auto-install on startup:
+
+```elisp
+(unless (package-installed-p 'copilot-agent)
+  (package-vc-install "https://github.com/yuankuns/emacs-copilot-agent"))
+```
+
+### `straight.el` + `use-package`
+
+Requires [straight.el](https://github.com/radian-software/straight.el) and
+`use-package` (built-in since Emacs 29; install separately on 27–28):
+
+```elisp
+(use-package copilot-agent
+  :straight (:host github :repo "yuankuns/emacs-copilot-agent"
+             :files ("*.el" "providers/*.el"))
+  :config
+  (copilot-agent-setup-keybindings))
+```
+
+Without `use-package`:
+
+```elisp
+(straight-use-package
+ '(copilot-agent :host github :repo "yuankuns/emacs-copilot-agent"
+                 :files ("*.el" "providers/*.el")))
+```
+
+### `elpaca`
+
+Requires [elpaca](https://github.com/progfolio/elpaca) with its `use-package`
+integration enabled (`elpaca-use-package-mode`):
+
+```elisp
+(use-package copilot-agent
+  :elpaca (:host github :repo "yuankuns/emacs-copilot-agent"
+           :files ("*.el" "providers/*.el"))
+  :config
+  (copilot-agent-setup-keybindings))
+```
+
+Without `use-package`:
+
+```elisp
+(elpaca (copilot-agent :host github :repo "yuankuns/emacs-copilot-agent"
+                       :files ("*.el" "providers/*.el"))
+  (copilot-agent-setup-keybindings))
+```
+
+### `quelpa`
+
+```elisp
+(quelpa '(copilot-agent :fetcher github
+                        :repo "yuankuns/emacs-copilot-agent"
+                        :files ("*.el" "providers/*.el")))
+```
+
 ### Manual
 
 ```bash
@@ -109,20 +188,8 @@ git clone https://github.com/yuankuns/emacs-copilot-agent.git \
 Add to `init.el`:
 
 ```elisp
-;; Both paths are required — providers/ holds the backend files
 (add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent")
-(add-to-list 'load-path "~/.emacs.d/emacs-copilot-agent/providers")
 (require 'copilot-agent)
-```
-
-### With `use-package` + `straight.el`
-
-```elisp
-(use-package copilot-agent
-  :straight (:host github :repo "yuankuns/emacs-copilot-agent"
-             :files ("*.el" "providers/*.el"))
-  :config
-  (copilot-agent-setup-keybindings))
 ```
 
 ---
