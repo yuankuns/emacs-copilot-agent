@@ -15,6 +15,27 @@
 (require 'json)
 (require 'copilot-agent-tools)
 
+;; Add providers/ to load-path so (require 'copilot-agent-*) works after
+;; package-vc-install (which only adds the package root).  Placed here rather
+;; than in copilot-agent.el so every entry point that loads this core file
+;; (copilot-agent-status, provider files, etc.) also gets the adjustment.
+;;
+;; eval-and-compile ensures it runs at byte-compile time too, so compiling
+;; test files in the same pass doesn't fail with "Cannot open load file".
+;;
+;; directory-file-name strips any trailing slash for a canonical form that
+;; matches what -L flags and most load-path entries use, avoiding duplicates.
+(eval-and-compile
+  (let* ((base     (or load-file-name
+                       buffer-file-name
+                       (locate-library "copilot-agent-api")))
+         (prov-dir (and base
+                        (directory-file-name
+                         (expand-file-name "providers"
+                                           (file-name-directory base))))))
+    (when (and prov-dir (file-directory-p prov-dir))
+      (add-to-list 'load-path prov-dir))))
+
 ;;; ---------- Provider Registry ----------
 
 (defvar copilot-agent-api--providers (make-hash-table :test #'eq)
@@ -54,7 +75,7 @@ Optional KWARGS override defaults:
   :system-prompt  - string prepended as system instruction
   :max-tokens     - integer (default 8192)
   :context-buffer - buffer whose directory becomes the tool cwd
-  :tools          - tool schema list (defaults to full copilot-agent-tools-schema)
+  :tools          - tool schema list (defaults to copilot-agent-tools-schema)
   :approve-all    - t to skip per-tool approval prompts"
   (copilot-agent-api--get-provider provider)   ; validate early
   (let* ((p     (copilot-agent-api--get-provider provider))
@@ -89,7 +110,8 @@ appear in any API response body.")
 
 (defun copilot-agent-api--curl-post (url headers json-body callback)
   "POST JSON-BODY string to URL with HEADERS list asynchronously via curl.
-CALLBACK is called as (BODY-STRING NIL) on success or (NIL ERROR-STRING) on failure."
+CALLBACK is called as (BODY-STRING NIL) on success or (NIL ERROR-STRING) on
+failure."
   (let* ((req-file (make-temp-file "copilot-agent-req" nil ".json"))
          (resp-buf (generate-new-buffer " *copilot-agent-http*")))
     (write-region json-body nil req-file nil 'silent)

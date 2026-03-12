@@ -595,5 +595,46 @@ Catches issues like invalid lambda variable names, unbalanced parens, etc."
           (when (file-exists-p tmp) (delete-file tmp)))))
     (should-not error-log)))
 
+;;; ============================================================
+;; BUG 13: providers/ not on load-path after package-vc-install
+;;
+;; Symptom: (require 'copilot-agent-qwen) failed with "Cannot open load
+;;          file" because package-vc-install only adds the package root to
+;;          load-path, not subdirectories.  The byte-compiler also hit this
+;;          during compilation of test files in the same pass.
+;;
+;; Root cause: Provider files live in providers/ which was never added to
+;;             load-path.  copilot-agent-load-providers used full paths so
+;;             initial loading worked, but any subsequent (require ...) call
+;;             (e.g. from copilot-agent-status) failed.
+;;
+;; Fix: eval-and-compile block in copilot-agent-api.el (required by all
+;;      entry points) adds providers/ to load-path at both compile time
+;;      and load time.
+;; ============================================================
+
+(ert-deftest regression/providers-on-load-path-after-require-api ()
+  "Loading copilot-agent-api must add providers/ to load-path.
+Simulates package-vc-install: temporarily restricts load-path to only
+the package root (no providers/) then force-loads copilot-agent-api via
+`load' (bypassing require's no-op for already-provided features) and
+verifies the eval-and-compile block adds providers/ to the local load-path.
+Removing or breaking the load-path setup causes this test to fail."
+  (let* ((root     (expand-file-name
+                    ".." (file-name-directory (or load-file-name buffer-file-name))))
+         (prov-dir (directory-file-name (expand-file-name "providers" root)))
+         ;; Start from a load-path that does NOT include providers/.
+         (load-path (list root)))
+    ;; Force-load the file (load always executes, unlike require which is a
+    ;; no-op for already-provided features).
+    (load (expand-file-name "copilot-agent-api" root) nil t)
+    ;; The eval-and-compile block must have added providers/ to load-path.
+    (should (member prov-dir load-path))
+    ;; All provider features must be requireable with providers/ on load-path.
+    (should (require 'copilot-agent-qwen          nil t))
+    (should (require 'copilot-agent-anthropic      nil t))
+    (should (require 'copilot-agent-gemini         nil t))
+    (should (require 'copilot-agent-github-copilot nil t))))
+
 (provide 'test-regressions)
 ;;; test-regressions.el ends here

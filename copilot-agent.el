@@ -35,6 +35,13 @@
 (require 'copilot-agent-ui)
 (require 'copilot-agent-status)
 
+;; Optional flycheck integration — declared here to silence byte-compiler warnings.
+(defvar flycheck-current-errors)
+(declare-function flycheck-error-line    "flycheck" (err))
+(declare-function flycheck-error-column  "flycheck" (err))
+(declare-function flycheck-error-level   "flycheck" (err))
+(declare-function flycheck-error-message "flycheck" (err))
+
 ;;; ---------- Customisation ----------
 
 (defgroup copilot-agent nil
@@ -289,13 +296,19 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 ;;; ---------- Autoloads for Providers ----------
 
 ;; Load providers so they self-register via `with-eval-after-load'.
+;; Note: providers/ is already on load-path via copilot-agent-api.el.
 (defun copilot-agent-load-providers ()
   "Load all bundled providers."
-  (let ((dir (file-name-directory (or load-file-name buffer-file-name))))
-    (load (expand-file-name "providers/copilot-agent-anthropic"      dir) t)
-    (load (expand-file-name "providers/copilot-agent-gemini"         dir) t)
-    (load (expand-file-name "providers/copilot-agent-qwen"           dir) t)
-    (load (expand-file-name "providers/copilot-agent-github-copilot" dir) t)))
+  (let* ((base     (or load-file-name buffer-file-name))
+         (prov-dir (and base
+                        (directory-file-name
+                         (expand-file-name "providers"
+                                           (file-name-directory base))))))
+    (when (and prov-dir (file-directory-p prov-dir))
+      (load (expand-file-name "copilot-agent-anthropic"      prov-dir) t)
+      (load (expand-file-name "copilot-agent-gemini"         prov-dir) t)
+      (load (expand-file-name "copilot-agent-qwen"           prov-dir) t)
+      (load (expand-file-name "copilot-agent-github-copilot" prov-dir) t))))
 
 (copilot-agent-load-providers)
 
