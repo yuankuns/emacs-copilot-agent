@@ -144,7 +144,7 @@ commands target the right directory (including remote SSH via TRAMP)."
                            (copilot-agent-ui--hide-thinking))
            :on-error     (lambda (m)
                            (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui-insert-error m)))))
+                           (copilot-agent-ui-insert-error m))))))
 
 ;;;###autoload
 (defun copilot-agent-fix-errors ()
@@ -183,7 +183,7 @@ commands target the right directory (including remote SSH via TRAMP)."
                            (copilot-agent-ui--hide-thinking))
            :on-error     (lambda (m)
                            (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui-insert-error m)))))
+                           (copilot-agent-ui-insert-error m))))))
 
 ;;;###autoload
 (defun copilot-agent-new-chat ()
