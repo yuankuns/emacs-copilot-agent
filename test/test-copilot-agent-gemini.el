@@ -26,6 +26,7 @@
 (require 'copilot-agent-tools)
 (require 'copilot-agent-api)
 (require 'copilot-agent-gemini)
+(advice-remove 'auth-source-pick-first-password 'copilot-agent-gemini-test-stub)
 
 ;;; ---------- Fixture Data ----------
 

@@ -23,6 +23,7 @@
 (require 'copilot-agent-tools)
 (require 'copilot-agent-api)
 (require 'copilot-agent-status)
+(advice-remove 'auth-source-pick-first-password 'copilot-agent-status-test-stub)
 
 ;;; ---------- Token formatting ----------
 

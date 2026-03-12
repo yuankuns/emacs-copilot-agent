@@ -26,6 +26,7 @@
 (require 'copilot-agent-tools)
 (require 'copilot-agent-api)
 (require 'copilot-agent-anthropic)
+(advice-remove 'auth-source-pick-first-password 'copilot-agent-anthropic-test-stub)
 
 ;;; ---------- Fixture Data ----------
 
