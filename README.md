@@ -249,8 +249,9 @@ Then in `init.el`:
    M-x copilot-agent-qwen-login
    ```
    A browser window opens to <https://chat.qwen.ai>.  Approve the device,
-   then return to Emacs.  Tokens are saved to `~/.qwen/oauth_creds.json`
-   and auto-refreshed.  Free tier: 2 000 requests/day.
+   then return to Emacs.  Tokens are saved to
+   `~/.emacs-copilot-agent/qwen_oauth_creds.json` and auto-refreshed.
+   Free tier: 2 000 requests/day.
 
 ### GitHub Copilot (requires active Copilot subscription, no API key)
 
@@ -274,13 +275,21 @@ Then in `init.el`:
 
 ---
 
-## API Key Security
+## Credential Storage
 
-Keys are read from `~/.authinfo` or `~/.authinfo.gpg` via Emacs'
-built-in `auth-source` library.  **No keys are stored in Emacs Lisp
-variables or your init file.**
+| Provider | Where credentials are stored |
+|---|---|
+| Anthropic | `~/.authinfo` (API key via `auth-source`) |
+| Gemini — API key mode | `~/.authinfo` (API key via `auth-source`) |
+| Gemini — CLI/OAuth mode | `~/.emacs-copilot-agent/gemini_oauth_creds.json` |
+| Qwen | `~/.emacs-copilot-agent/qwen_oauth_creds.json` |
+| GitHub Copilot | `~/.emacs-copilot-agent/github_copilot_creds.json` |
 
-To use the encrypted version:
+For Anthropic and Gemini API key mode, keys are read via Emacs' built-in
+`auth-source` library.  **No keys are stored in Emacs Lisp variables or
+your init file.**
+
+To encrypt your `~/.authinfo` with GPG:
 
 ```bash
 gpg --output ~/.authinfo.gpg --symmetric ~/.authinfo
