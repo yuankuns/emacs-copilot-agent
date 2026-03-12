@@ -26,7 +26,12 @@
        (test-dir  this-dir))
   (dolist (d (list root providers test-dir))
     (unless (member d load-path)
-      (push d load-path))))
+      (push d load-path)))
+  ;; Delete stale .elc files so tests always load fresh source, not a
+  ;; potentially outdated byte-compiled version that could mask real failures.
+  (dolist (dir (list root providers))
+    (dolist (elc (directory-files dir t "\\.elc\\'"))
+      (delete-file elc))))
 
 ;; Stub auth-source for all test suites so no real credentials are needed
 (require 'auth-source)
