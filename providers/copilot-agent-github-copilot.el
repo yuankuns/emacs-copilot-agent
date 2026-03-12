@@ -185,11 +185,10 @@ one-time code to approve access.  The GitHub OAuth token is saved to
          (interval-ms (* (or (cdr (assq 'interval  device)) 5) 1000)))
     (unless (and device-code user-code verify-url)
       (error "GitHub Copilot device auth failed: %s" (json-encode device)))
-    ;; Step 2: prompt user and open browser
+    ;; Step 2: prompt user (no browser — open the URL manually)
     (kill-new user-code)
-    (message "GitHub Copilot login:\n  Opening: %s\n  Enter code: %s  (copied to clipboard)\n  Waiting…"
+    (message "GitHub Copilot login:\n  Open: %s\n  Enter code: %s  (copied to clipboard)\n  Waiting…"
              verify-url user-code)
-    (browse-url verify-url)
     ;; Step 3: poll for the access token
     (let ((deadline (+ (float-time) exp-secs))
           (token nil))
