@@ -29,7 +29,7 @@
       (push d load-path)))
   ;; Delete stale .elc files so tests always load fresh source, not a
   ;; potentially outdated byte-compiled version that could mask real failures.
-  (dolist (dir (list root providers))
+  (dolist (dir (list root providers test-dir))
     (dolist (elc (directory-files dir t "\\.elc\\'"))
       (delete-file elc))))
 

@@ -615,15 +615,22 @@ Catches issues like invalid lambda variable names, unbalanced parens, etc."
 
 (ert-deftest regression/providers-on-load-path-after-require-api ()
   "Loading copilot-agent-api must add providers/ to load-path.
-Verifies the eval-and-compile block ran and produced the correct result:
-providers/ is on load-path and all provider features are requireable.
-This catches regressions where the load-path setup is removed or broken."
+Simulates package-vc-install: temporarily restricts load-path to only
+the package root (no providers/) then force-loads copilot-agent-api via
+`load' (bypassing require's no-op for already-provided features) and
+verifies the eval-and-compile block adds providers/ to the local load-path.
+Removing or breaking the load-path setup causes this test to fail."
   (let* ((root     (expand-file-name
                     ".." (file-name-directory (or load-file-name buffer-file-name))))
-         (prov-dir (directory-file-name (expand-file-name "providers" root))))
-    ;; providers/ must be on load-path as a result of loading copilot-agent-api
+         (prov-dir (directory-file-name (expand-file-name "providers" root)))
+         ;; Start from a load-path that does NOT include providers/.
+         (load-path (list root)))
+    ;; Force-load the file (load always executes, unlike require which is a
+    ;; no-op for already-provided features).
+    (load (expand-file-name "copilot-agent-api" root) nil t)
+    ;; The eval-and-compile block must have added providers/ to load-path.
     (should (member prov-dir load-path))
-    ;; All provider features must be requireable (no hard errors)
+    ;; All provider features must be requireable with providers/ on load-path.
     (should (require 'copilot-agent-qwen          nil t))
     (should (require 'copilot-agent-anthropic      nil t))
     (should (require 'copilot-agent-gemini         nil t))
