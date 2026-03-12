@@ -54,16 +54,6 @@ Anthropic calls `parameters' -> `input_schema'; everything else matches."
          (input_schema . ,params))))
    tool-schema))
 
-;;; ---------- Message Conversion ----------
-
-(defun copilot-agent-anthropic--format-messages (messages)
-  "Convert canonical MESSAGES list to Anthropic wire format.
-Canonical format is already Anthropic-compatible; this is a passthrough
-with minor normalization (ensure :content is properly encoded)."
-  ;; Canonical format uses Anthropic conventions internally, so messages
-  ;; pass through directly.  We just ensure the list is a vector for JSON.
-  (vconcat messages))
-
 ;;; ---------- Request Building ----------
 
 (defun copilot-agent-anthropic--build-request (session)

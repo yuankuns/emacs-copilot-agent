@@ -35,6 +35,13 @@
 (require 'copilot-agent-ui)
 (require 'copilot-agent-status)
 
+;; Optional flycheck integration — declare to silence byte-compiler warnings.
+(defvar flycheck-current-errors)
+(declare-function flycheck-error-line    "flycheck" (err))
+(declare-function flycheck-error-column  "flycheck" (err))
+(declare-function flycheck-error-level   "flycheck" (err))
+(declare-function flycheck-error-message "flycheck" (err))
+
 ;;; ---------- Customisation ----------
 
 (defgroup copilot-agent nil
@@ -282,6 +289,7 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 
 (fset 'copilot-agent-command-map copilot-agent-command-map)
 
+;;;###autoload
 (defun copilot-agent-setup-keybindings ()
   "Bind `copilot-agent-keymap-prefix' to the command map."
   (global-set-key (kbd copilot-agent-keymap-prefix) 'copilot-agent-command-map))

@@ -12,6 +12,9 @@
 
 (require 'copilot-agent-api)
 
+;; Defined in copilot-agent-gemini.el — declared here to silence byte-compiler warnings.
+(defvar copilot-agent-gemini-auth-mode)
+
 ;;; ---------- Known model metadata ----------
 
 (defconst copilot-agent-status--known-models

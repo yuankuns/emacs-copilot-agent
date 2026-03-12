@@ -18,6 +18,10 @@
 
 ;;; Code:
 
+;; Defined in copilot-agent.el — declared here to silence byte-compiler warnings.
+(defvar copilot-agent-provider)
+
+
 (require 'seq)
 (require 'subr-x)
 (require 'copilot-agent-api)
