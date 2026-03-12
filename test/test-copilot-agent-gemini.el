@@ -20,6 +20,9 @@
     (unless (member d load-path) (push d load-path))))
 
 (require 'auth-source)
+(advice-add 'auth-source-pick-first-password :override
+            (lambda (&rest _) "test-gemini-key-stub")
+            '((name . copilot-agent-gemini-test-stub)))
 (require 'copilot-agent-tools)
 (require 'copilot-agent-api)
 (require 'copilot-agent-gemini)
