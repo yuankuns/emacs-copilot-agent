@@ -522,5 +522,78 @@ so thoughtSignature on functionCall parts is not lost."
   (should-not (copilot-agent-gemini--native-parts-p nil))
   (should-not (copilot-agent-gemini--native-parts-p [])))
 
+;;; ============================================================
+;; BUG 12: `lambda (t)' is an invalid variable name in lexical-binding mode
+;;
+;; Symptom: package-vc-install succeeded but all Gemini provider functions
+;;          (--native-parts-p, --convert-message, --parse-response, etc.) and
+;;          copilot-agent-explain-region appeared undefined after install.
+;;
+;; Root cause: Two source files used `t' as a lambda parameter name:
+;;   providers/copilot-agent-gemini.el line 341: (lambda (t) ...)
+;;   copilot-agent.el line 137:                  (lambda (t) ...)
+;; In `lexical-binding: t' mode the byte-compiler rejects `t' as a variable
+;; because it shadows the Lisp boolean constant:
+;;   Error: Invalid lambda variable t
+;; This caused batch-byte-compile to fail with exit code 1, so no .elc was
+;; produced.  The ERT test suite never caught this because it loads source
+;; files interpreted — the interpreter does not enforce the same restriction.
+;;
+;; Fix: Renamed the parameter to `tier' and `text' respectively.
+;; Prevention: GitHub Actions CI now byte-compiles all files on every PR.
+;; ============================================================
+
+(ert-deftest regression/no-lambda-t-parameter-in-source-files ()
+  "No source file may use `t' as a lambda parameter name.
+In lexical-binding mode this is a fatal byte-compile error that prevents
+.elc generation by package-vc-install, leaving functions undefined."
+  (let* ((root (expand-file-name
+                ".." (file-name-directory (or load-file-name buffer-file-name))))
+         (source-files
+          (append
+           (directory-files root t "\\.el\\'")
+           (directory-files (expand-file-name "providers" root) t "\\.el\\'")))
+         offenders)
+    (dolist (f source-files)
+      (with-temp-buffer
+        (insert-file-contents f)
+        ;; Match `t' as a standalone parameter in any position in the lambda list.
+        ;; \\_< / \\_> are word-boundary anchors that avoid matching `t-foo'.
+        (when (re-search-forward "(lambda\\s-+(\\([^)]*\\_<t\\_>[^)]*\\))" nil t)
+          (push (file-name-nondirectory f) offenders))))
+    (should-not offenders)))
+
+(ert-deftest regression/source-files-byte-compile-without-errors ()
+  "All source .el files must byte-compile without fatal errors.
+Uses byte-compile-file with byte-compile-dest-file-function redirected
+to a temporary file so no .elc artifacts are left in the source tree.
+Catches issues like invalid lambda variable names, unbalanced parens, etc."
+  (let* ((root (expand-file-name
+                ".." (file-name-directory (or load-file-name buffer-file-name))))
+         (files `(,(expand-file-name "copilot-agent-tools.el"  root)
+                  ,(expand-file-name "copilot-agent-api.el"    root)
+                  ,(expand-file-name "copilot-agent-ui.el"     root)
+                  ,(expand-file-name "copilot-agent-status.el" root)
+                  ,(expand-file-name "copilot-agent.el"        root)
+                  ,(expand-file-name "providers/copilot-agent-anthropic.el"    root)
+                  ,(expand-file-name "providers/copilot-agent-gemini.el"       root)
+                  ,(expand-file-name "providers/copilot-agent-qwen.el"         root)
+                  ,(expand-file-name "providers/copilot-agent-github-copilot.el" root)))
+         (error-log nil))
+    (dolist (f files)
+      (let ((tmp (make-temp-file "copilot-bytecomp-" nil ".elc")))
+        (unwind-protect
+            (condition-case err
+                ;; Redirect .elc output to a temp file so no artifacts land in the tree.
+                (let ((byte-compile-dest-file-function (lambda (_) tmp))
+                      (byte-compile-error-on-warn nil))
+                  (byte-compile-file f))
+              (error
+               (push (format "%s: %s" (file-name-nondirectory f)
+                             (error-message-string err))
+                     error-log)))
+          (when (file-exists-p tmp) (delete-file tmp)))))
+    (should-not error-log)))
+
 (provide 'test-regressions)
 ;;; test-regressions.el ends here

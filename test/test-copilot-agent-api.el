@@ -222,7 +222,7 @@
   (let* ((s        (copilot-agent-api-new-session 'stub))
          (received nil))
     (copilot-agent-api-send s "hello"
-                            (list :on-text     (lambda (t) (setq received t))
+                            (list :on-text     (lambda (text) (setq received text))
                                   :on-done     (lambda () nil)
                                   :on-approve  (lambda (_n _i _s) t)))
     (should (equal received "stub reply"))))

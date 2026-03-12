@@ -134,19 +134,17 @@ commands target the right directory (including remote SSH via TRAMP)."
     (copilot-agent-api-send
      session prompt
      (list :on-thinking  #'copilot-agent-ui--show-thinking
-           :on-text      (lambda (t)
+           :on-text      (lambda (text)
                            (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui-insert-assistant-text t))
+                           (copilot-agent-ui-insert-assistant-text text))
            :on-tool-call   #'copilot-agent-ui-insert-tool-call
            :on-tool-result #'copilot-agent-ui-insert-tool-result
            :on-approve     (lambda (n i s) (copilot-agent-ui-approve-tool n i s))
            :on-done      (lambda ()
-                           (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui--insert-prompt))
+                           (copilot-agent-ui--hide-thinking))
            :on-error     (lambda (m)
                            (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui-insert-error m)
-                           (copilot-agent-ui--insert-prompt))))))
+                           (copilot-agent-ui-insert-error m))))))
 
 ;;;###autoload
 (defun copilot-agent-fix-errors ()
@@ -182,8 +180,7 @@ commands target the right directory (including remote SSH via TRAMP)."
            :on-tool-result #'copilot-agent-ui-insert-tool-result
            :on-approve     (lambda (n i s) (copilot-agent-ui-approve-tool n i s))
            :on-done      (lambda ()
-                           (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui--insert-prompt))
+                           (copilot-agent-ui--hide-thinking))
            :on-error     (lambda (m)
                            (copilot-agent-ui--hide-thinking)
                            (copilot-agent-ui-insert-error m))))))
@@ -198,8 +195,7 @@ commands target the right directory (including remote SSH via TRAMP)."
         (erase-buffer))
       (setq copilot-agent-ui--session  session
             copilot-agent-ui--input-marker nil)
-      (copilot-agent-ui--insert-welcome)
-      (copilot-agent-ui--insert-prompt))
+      (copilot-agent-ui--draw-initial-contents))
     (message "New Copilot Agent session started")))
 
 ;;;###autoload
@@ -263,8 +259,7 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
     (let ((inhibit-read-only t))
       (erase-buffer))
     (setq copilot-agent-ui--input-marker nil)
-    (copilot-agent-ui--insert-welcome)
-    (copilot-agent-ui--insert-prompt))
+    (copilot-agent-ui--draw-initial-contents))
   (message "History cleared"))
 
 ;;; ---------- Optional Keybinding ----------
