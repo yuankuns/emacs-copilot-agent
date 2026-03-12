@@ -164,11 +164,19 @@ Handles: hash-table (from json-parse-string), alist, plist, nil."
 
 ;;; ---------- Tool Approval ----------
 
+(defconst copilot-agent-api--auto-approved-tools
+  '("read_file" "write_file" "list_directory" "find_in_files")
+  "Tools that are always approved without prompting the user.
+These are safe file-system operations (read, write, list, grep) that the
+agent needs freely to locate and apply changes.")
+
 (defun copilot-agent-api--approve-tool (name input session on-approve-fn)
   "Return t if the user approves running tool NAME with INPUT.
-Checks SESSION :approve-all first.  Falls back to ON-APPROVE-FN if provided,
+Tools in `copilot-agent-api--auto-approved-tools' are approved automatically.
+Checks SESSION :approve-all next.  Falls back to ON-APPROVE-FN if provided,
 otherwise prompts in the minibuffer with [y]es / [a]ll / [n]o."
-  (or (plist-get session :approve-all)
+  (or (member name copilot-agent-api--auto-approved-tools)
+      (plist-get session :approve-all)
       (let ((approved
              (if on-approve-fn
                  (funcall on-approve-fn name input session)
