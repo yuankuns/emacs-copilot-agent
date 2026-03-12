@@ -169,9 +169,9 @@ Caches the result in memory. Returns the token string."
 ;;;###autoload
 (defun copilot-agent-github-copilot-login ()
   "Authenticate with GitHub using the OAuth device-code flow.
-Opens https://github.com/login/device in a browser; enter the displayed
-one-time code to approve access.  The GitHub OAuth token is saved to
-~/.emacs-copilot-agent/github_copilot_creds.json."
+Displays a URL and one-time code in the echo area — open the URL in any
+browser, enter the code, then return to Emacs.  The GitHub OAuth token
+is saved to ~/.emacs-copilot-agent/github_copilot_creds.json."
   (interactive)
   ;; Step 1: request a device code
   (let* ((device      (copilot-agent-github-copilot--post-form
@@ -185,11 +185,10 @@ one-time code to approve access.  The GitHub OAuth token is saved to
          (interval-ms (* (or (cdr (assq 'interval  device)) 5) 1000)))
     (unless (and device-code user-code verify-url)
       (error "GitHub Copilot device auth failed: %s" (json-encode device)))
-    ;; Step 2: prompt user and open browser
+    ;; Step 2: prompt user — show URL and code, do not auto-open a browser
     (kill-new user-code)
-    (message "GitHub Copilot login:\n  Opening: %s\n  Enter code: %s  (copied to clipboard)\n  Waiting…"
+    (message "GitHub Copilot login:\n  Open: %s\n  Enter code: %s  (copied to clipboard)\n  Waiting for approval…"
              verify-url user-code)
-    (browse-url verify-url)
     ;; Step 3: poll for the access token
     (let ((deadline (+ (float-time) exp-secs))
           (token nil))
