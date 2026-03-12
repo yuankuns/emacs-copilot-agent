@@ -557,14 +557,16 @@ In lexical-binding mode this is a fatal byte-compile error that prevents
     (dolist (f source-files)
       (with-temp-buffer
         (insert-file-contents f)
-        ;; Match (lambda (t) or (lambda (t arg) etc. — t as the first parameter
-        (when (re-search-forward "(lambda\\s-+(\\s-*t[ \t\n,)]" nil t)
+        ;; Match `t' as a standalone parameter in any position in the lambda list.
+        ;; \\_< / \\_> are word-boundary anchors that avoid matching `t-foo'.
+        (when (re-search-forward "(lambda\\s-+(\\([^)]*\\_<t\\_>[^)]*\\))" nil t)
           (push (file-name-nondirectory f) offenders))))
     (should-not offenders)))
 
 (ert-deftest regression/source-files-byte-compile-without-errors ()
   "All source .el files must byte-compile without fatal errors.
-Uses byte-compile (not byte-compile-file) to avoid writing .elc files.
+Uses byte-compile-file with byte-compile-dest-file-function redirected
+to a temporary file so no .elc artifacts are left in the source tree.
 Catches issues like invalid lambda variable names, unbalanced parens, etc."
   (let* ((root (expand-file-name
                 ".." (file-name-directory (or load-file-name buffer-file-name))))
@@ -579,18 +581,18 @@ Catches issues like invalid lambda variable names, unbalanced parens, etc."
                   ,(expand-file-name "providers/copilot-agent-github-copilot.el" root)))
          (error-log nil))
     (dolist (f files)
-      (condition-case err
-          ;; byte-compile-buffer compiles a buffer without writing a .elc file
-          (with-temp-buffer
-            (insert-file-contents f)
-            (setq buffer-file-name f)
-            ;; Capture byte-compiler errors by watching for signal
-            (let ((byte-compile-error-on-warn nil))
-              (byte-compile-file f t)))   ; t = do not write output file
-        (error
-         (push (format "%s: %s" (file-name-nondirectory f)
-                       (error-message-string err))
-               error-log))))
+      (let ((tmp (make-temp-file "copilot-bytecomp-" nil ".elc")))
+        (unwind-protect
+            (condition-case err
+                ;; Redirect .elc output to a temp file so no artifacts land in the tree.
+                (let ((byte-compile-dest-file-function (lambda (_) tmp))
+                      (byte-compile-error-on-warn nil))
+                  (byte-compile-file f))
+              (error
+               (push (format "%s: %s" (file-name-nondirectory f)
+                             (error-message-string err))
+                     error-log)))
+          (when (file-exists-p tmp) (delete-file tmp)))))
     (should-not error-log)))
 
 (provide 'test-regressions)
