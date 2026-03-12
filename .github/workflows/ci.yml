@@ -21,6 +21,7 @@ jobs:
       - name: Byte-compile all source files
         run: |
           emacs --batch -L . -L providers \
+            --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
             copilot-agent-tools.el \
             copilot-agent-api.el \
