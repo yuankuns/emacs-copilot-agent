@@ -295,32 +295,13 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 
 ;;; ---------- Autoloads for Providers ----------
 
-;; Add providers/ to load-path so (require 'copilot-agent-*) works after
-;; package-vc-install (which only adds the package root directory).  This
-;; complements copilot-agent-load-providers so autoloaded entry points that
-;; run before or without calling that function also see providers on load-path.
-;;
-;; eval-and-compile is essential: the byte-compiler does NOT evaluate plain
-;; top-level `let' forms, so without it providers/ would never be on
-;; load-path during byte-compilation of this package's own test files,
-;; causing a hard "Cannot open load file" error for (require 'copilot-agent-qwen).
-(eval-and-compile
-  (let* ((base     (or load-file-name
-                       (locate-library "copilot-agent")
-                       buffer-file-name))
-         (prov-dir (and base
-                        (file-name-as-directory
-                         (expand-file-name "providers"
-                                           (file-name-directory base))))))
-    (when (and prov-dir (file-directory-p prov-dir))
-      (add-to-list 'load-path prov-dir))))
-
 ;; Load providers so they self-register via `with-eval-after-load'.
+;; Note: providers/ is already on load-path via copilot-agent-api.el.
 (defun copilot-agent-load-providers ()
   "Load all bundled providers."
   (let* ((base     (or load-file-name buffer-file-name))
          (prov-dir (and base
-                        (file-name-as-directory
+                        (directory-file-name
                          (expand-file-name "providers"
                                            (file-name-directory base))))))
     (when (and prov-dir (file-directory-p prov-dir))
