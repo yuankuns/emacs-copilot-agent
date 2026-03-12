@@ -113,10 +113,13 @@ Returns plist with :text, :tool-calls, :stop-reason, :error."
                           :name  (cdr (assq 'name block))
                           :input (cdr (assq 'input block)))
                     tool-calls)))))
-        (list :text        text
-              :tool-calls  (nreverse tool-calls)
-              :stop-reason stop-reason
-              :raw-content content))
+        (let* ((usage        (cdr (assq 'usage data)))
+               (input-tokens (and usage (cdr (assq 'input_tokens usage)))))
+          (list :text         text
+                :tool-calls   (nreverse tool-calls)
+                :stop-reason  stop-reason
+                :raw-content  content
+                :input-tokens input-tokens)))
     (error (list :error (format "Parse error: %s" (error-message-string err))))))
 
 ;;; ---------- Provider Send Function ----------
@@ -174,6 +177,7 @@ TOOL-RESULTS is a list of plists with :tool-use-id and :content."
    (list :display-name          "Anthropic Claude"
          :default-model         copilot-agent-anthropic-default-model
          :default-model-fn      (lambda () copilot-agent-anthropic-default-model)
+         :context-window        200000
          :send-fn               #'copilot-agent-anthropic-send
          :make-tool-result-fn   #'copilot-agent-anthropic-make-tool-result-message
          :format-tools-fn       #'copilot-agent-anthropic--format-tools

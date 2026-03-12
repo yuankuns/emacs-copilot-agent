@@ -393,10 +393,13 @@ Returns plist with :text :tool-calls :stop-reason :raw-content or :error."
                                                                 (plist-get tc :input)))))))
                                          ordered))))
                     (or content ""))))
-            (list :text        (unless (equal content :null) content)
-                  :tool-calls  ordered
-                  :stop-reason finish
-                  :raw-content raw-content))))
+            (let* ((usage        (cdr (assq 'usage data)))
+                   (input-tokens (and usage (cdr (assq 'prompt_tokens usage)))))
+              (list :text         (unless (equal content :null) content)
+                    :tool-calls   ordered
+                    :stop-reason  finish
+                    :raw-content  raw-content
+                    :input-tokens input-tokens)))))
     (error (list :error (format "Parse error: %s" (error-message-string err))))))
 
 ;;; ---------- Provider Send Function ----------
@@ -443,6 +446,7 @@ CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING)."
    (list :display-name        "GitHub Copilot"
          :default-model       copilot-agent-github-copilot-default-model
          :default-model-fn    (lambda () copilot-agent-github-copilot-default-model)
+         :context-window      128000
          :send-fn             #'copilot-agent-github-copilot-send
          :make-tool-result-fn #'copilot-agent-github-copilot-make-tool-result-message
          :format-tools-fn     #'copilot-agent-github-copilot--format-tools

@@ -311,6 +311,29 @@ right after the two '> ' characters."
     (let ((overlays (overlays-in (point-min) (point-max))))
       (should (= (length overlays) 1)))))
 
+(ert-deftest ui/show-thinking-default-label ()
+  "show-thinking with no argument displays 'Thinking…'."
+  (with-fresh-chat-buffer
+    (copilot-agent-ui--show-thinking)
+    (let ((after (overlay-get copilot-agent-ui--thinking-overlay 'after-string)))
+      (should (string-match-p "Thinking" after)))))
+
+(ert-deftest ui/show-thinking-running-label ()
+  "show-thinking with 'Running…' displays that label."
+  (with-fresh-chat-buffer
+    (copilot-agent-ui--show-thinking "Running…")
+    (let ((after (overlay-get copilot-agent-ui--thinking-overlay 'after-string)))
+      (should (string-match-p "Running" after)))))
+
+(ert-deftest ui/show-thinking-label-replaces-previous ()
+  "Calling show-thinking with a new label replaces the old one."
+  (with-fresh-chat-buffer
+    (copilot-agent-ui--show-thinking "Thinking…")
+    (copilot-agent-ui--show-thinking "Running…")
+    (let ((after (overlay-get copilot-agent-ui--thinking-overlay 'after-string)))
+      (should (string-match-p "Running" after))
+      (should-not (string-match-p "Thinking" after)))))
+
 ;;; ---------- Tool approval ----------
 
 (ert-deftest ui/approve-tool-skips-prompt-when-approve-all ()

@@ -326,10 +326,13 @@ Returns plist with :text :tool-calls :stop-reason :raw-content :error."
                                                                        (plist-get tc :input)))))))
                                                 ordered))))
                     (or content ""))))
-            (list :text        (unless (equal content :null) content)
-                  :tool-calls  ordered
-                  :stop-reason finish
-                  :raw-content raw-content))))
+            (let* ((usage        (cdr (assq 'usage data)))
+                   (input-tokens (and usage (cdr (assq 'prompt_tokens usage)))))
+              (list :text         (unless (equal content :null) content)
+                    :tool-calls   ordered
+                    :stop-reason  finish
+                    :raw-content  raw-content
+                    :input-tokens input-tokens)))))
     (error (list :error (format "Parse error: %s" (error-message-string err))))))
 
 ;;; ---------- Provider Send Function ----------
@@ -384,6 +387,7 @@ OpenAI-compatible APIs require one {\"role\":\"tool\"} message per tool call."
    (list :display-name        "Alibaba Qwen (free portal)"
          :default-model       copilot-agent-qwen-default-model
          :default-model-fn    (lambda () copilot-agent-qwen-default-model)
+         :context-window      128000
          :send-fn             #'copilot-agent-qwen-send
          :make-tool-result-fn #'copilot-agent-qwen-make-tool-result-message
          :format-tools-fn     #'copilot-agent-qwen--format-tools

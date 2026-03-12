@@ -203,13 +203,14 @@ The full result is always sent to the LLM; this only affects display."
 
 ;;; ---------- Thinking indicator ----------
 
-(defun copilot-agent-ui--show-thinking ()
+(defun copilot-agent-ui--show-thinking (&optional label)
   (with-current-buffer (copilot-agent-ui-get-buffer)
     (copilot-agent-ui--hide-thinking)
     (let ((ov (make-overlay (marker-position copilot-agent-ui--history-end-marker)
                             (marker-position copilot-agent-ui--history-end-marker))))
       (overlay-put ov 'after-string
-                   (propertize "\nThinking…\n" 'face 'copilot-agent-thinking-face))
+                   (propertize (format "\n%s\n" (or label "Thinking…"))
+                               'face 'copilot-agent-thinking-face))
       (setq copilot-agent-ui--thinking-overlay ov))))
 
 (defun copilot-agent-ui--hide-thinking ()
@@ -234,18 +235,32 @@ The full result is always sent to the LLM; this only affects display."
 
 ;;; ---------- Tool approval ----------
 
+(defun copilot-agent-ui--format-tool-arg-value (val)
+  "Format a tool argument value for display, truncating long strings."
+  (if (stringp val)
+      (let ((limit 72))
+        (if (> (length val) limit)
+            (format "%S… (%d chars)" (substring val 0 limit) (length val))
+          (format "%S" val)))
+    (format "%S" val)))
+
 (defun copilot-agent-ui-approve-tool (name input session)
   "Prompt in the minibuffer to approve running tool NAME.
 Returns t if approved, nil if declined."
   (if (plist-get session :approve-all)
       t
-    (let* ((args-str (if (listp input)
-                         (mapconcat (lambda (p) (format "%s: %S" (car p) (cdr p)))
-                                    input "  ")
-                       (format "%S" input)))
-           (ch (read-char-choice
-                (format "Run tool `%s'  %s\n[y]es / [a]ll / [n]o: " name args-str)
-                '(?y ?Y ?a ?A ?n ?N))))
+    (let* ((args-str
+            (if (listp input)
+                (mapconcat
+                 (lambda (p)
+                   (format "  %-14s %s"
+                           (concat (symbol-name (car p)) ":")
+                           (copilot-agent-ui--format-tool-arg-value (cdr p))))
+                 input "\n")
+              (format "  %S" input)))
+           (prompt (format "Tool: %s\n%s\n\n[y] yes once  [a] yes always  [n] no: "
+                           name args-str))
+           (ch (read-char-choice prompt '(?y ?Y ?a ?A ?n ?N))))
       (pcase (downcase ch)
         (?y t)
         (?a (plist-put session :approve-all t) t)
@@ -307,10 +322,16 @@ buffer that is not the agent chat buffer itself, then updates:
         :on-text        (lambda (text)
                           (copilot-agent-ui--hide-thinking)
                           (copilot-agent-ui-insert-assistant-text text))
-        :on-tool-call   #'copilot-agent-ui-insert-tool-call
-        :on-tool-result #'copilot-agent-ui-insert-tool-result
+        :on-tool-call   (lambda (name input)
+                          (copilot-agent-ui-insert-tool-call name input)
+                          (copilot-agent-ui--show-thinking "Running…"))
+        :on-tool-result (lambda (name result)
+                          (copilot-agent-ui--hide-thinking)
+                          (copilot-agent-ui-insert-tool-result name result))
         :on-approve     (lambda (name input session)
                           (copilot-agent-ui-approve-tool name input session))
+        :on-compacting  (lambda ()
+                          (copilot-agent-ui--show-thinking "Compacting history…"))
         :on-done        (lambda ()
                           (copilot-agent-ui--hide-thinking)
                           (with-current-buffer (copilot-agent-ui-get-buffer)
