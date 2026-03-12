@@ -522,5 +522,76 @@ so thoughtSignature on functionCall parts is not lost."
   (should-not (copilot-agent-gemini--native-parts-p nil))
   (should-not (copilot-agent-gemini--native-parts-p [])))
 
+;;; ============================================================
+;; BUG 12: `lambda (t)' is an invalid variable name in lexical-binding mode
+;;
+;; Symptom: package-vc-install succeeded but all Gemini provider functions
+;;          (--native-parts-p, --convert-message, --parse-response, etc.) and
+;;          copilot-agent-explain-region appeared undefined after install.
+;;
+;; Root cause: Two source files used `t' as a lambda parameter name:
+;;   providers/copilot-agent-gemini.el line 341: (lambda (t) ...)
+;;   copilot-agent.el line 137:                  (lambda (t) ...)
+;; In `lexical-binding: t' mode the byte-compiler rejects `t' as a variable
+;; because it shadows the Lisp boolean constant:
+;;   Error: Invalid lambda variable t
+;; This caused batch-byte-compile to fail with exit code 1, so no .elc was
+;; produced.  The ERT test suite never caught this because it loads source
+;; files interpreted — the interpreter does not enforce the same restriction.
+;;
+;; Fix: Renamed the parameter to `tier' and `text' respectively.
+;; Prevention: GitHub Actions CI now byte-compiles all files on every PR.
+;; ============================================================
+
+(ert-deftest regression/no-lambda-t-parameter-in-source-files ()
+  "No source file may use `t' as a lambda parameter name.
+In lexical-binding mode this is a fatal byte-compile error that prevents
+.elc generation by package-vc-install, leaving functions undefined."
+  (let* ((root (expand-file-name
+                ".." (file-name-directory (or load-file-name buffer-file-name))))
+         (source-files
+          (append
+           (directory-files root t "\\.el\\'")
+           (directory-files (expand-file-name "providers" root) t "\\.el\\'")))
+         offenders)
+    (dolist (f source-files)
+      (with-temp-buffer
+        (insert-file-contents f)
+        ;; Match (lambda (t) or (lambda (t arg) etc. — t as the first parameter
+        (when (re-search-forward "(lambda\\s-+(\\s-*t[ \t\n,)]" nil t)
+          (push (file-name-nondirectory f) offenders))))
+    (should-not offenders)))
+
+(ert-deftest regression/source-files-byte-compile-without-errors ()
+  "All source .el files must byte-compile without fatal errors.
+Uses byte-compile (not byte-compile-file) to avoid writing .elc files.
+Catches issues like invalid lambda variable names, unbalanced parens, etc."
+  (let* ((root (expand-file-name
+                ".." (file-name-directory (or load-file-name buffer-file-name))))
+         (files `(,(expand-file-name "copilot-agent-tools.el"  root)
+                  ,(expand-file-name "copilot-agent-api.el"    root)
+                  ,(expand-file-name "copilot-agent-ui.el"     root)
+                  ,(expand-file-name "copilot-agent-status.el" root)
+                  ,(expand-file-name "copilot-agent.el"        root)
+                  ,(expand-file-name "providers/copilot-agent-anthropic.el"    root)
+                  ,(expand-file-name "providers/copilot-agent-gemini.el"       root)
+                  ,(expand-file-name "providers/copilot-agent-qwen.el"         root)
+                  ,(expand-file-name "providers/copilot-agent-github-copilot.el" root)))
+         (error-log nil))
+    (dolist (f files)
+      (condition-case err
+          ;; byte-compile-buffer compiles a buffer without writing a .elc file
+          (with-temp-buffer
+            (insert-file-contents f)
+            (setq buffer-file-name f)
+            ;; Capture byte-compiler errors by watching for signal
+            (let ((byte-compile-error-on-warn nil))
+              (byte-compile-file f t)))   ; t = do not write output file
+        (error
+         (push (format "%s: %s" (file-name-nondirectory f)
+                       (error-message-string err))
+               error-log))))
+    (should-not error-log)))
+
 (provide 'test-regressions)
 ;;; test-regressions.el ends here
