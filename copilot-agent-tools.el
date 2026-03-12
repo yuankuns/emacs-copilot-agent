@@ -81,12 +81,14 @@ Returns file:line:match triples, capped at 200 lines.")
                      . ((path . ((type . "string")
                                  (description . "Path to the file to delete")))))
                     (required . ["path"])))))
-  "Universal tool schema list.  Format: list of alists with `name', `description', `parameters'.")
+  "Universal tool schema list.
+Format: list of alists with `name', `description', `parameters'.")
 
 ;;; ---------- Execution Context ----------
 
 (defvar copilot-agent-tools--context nil
-  "Plist with :directory (string) and :buffer (buffer) for the active editing context.")
+  "Plist with :directory (string) and :buffer (buffer).
+Tracks the active editing context; set via `copilot-agent-tools-set-context'.")
 
 (defun copilot-agent-tools-set-context (buffer)
   "Set execution context from BUFFER's `default-directory'."
@@ -123,7 +125,7 @@ expanded against the context directory."
   (and (featurep 'tramp) (tramp-tramp-file-p dir)))
 
 (defun copilot-agent-tools--host-label (dir)
-  "Return 'user@host' label for a TRAMP DIR, or nil for local paths."
+  "Return \"user@host\" label for a TRAMP DIR, or nil for local paths."
   (when (copilot-agent-tools--remote-p dir)
     (with-parsed-tramp-file-name dir v
       (if (and v-user (not (string-empty-p v-user)))

@@ -20,11 +20,13 @@
     (unless (member d load-path) (push d load-path))))
 
 (require 'auth-source)
-(cl-letf (((symbol-function 'auth-source-pick-first-password)
-           (lambda (&rest _) "test-gemini-key")))
-  (require 'copilot-agent-tools)
-  (require 'copilot-agent-api)
-  (require 'copilot-agent-gemini))
+(advice-add 'auth-source-pick-first-password :override
+            (lambda (&rest _) "test-gemini-key-stub")
+            '((name . copilot-agent-gemini-test-stub)))
+(require 'copilot-agent-tools)
+(require 'copilot-agent-api)
+(require 'copilot-agent-gemini)
+(advice-remove 'auth-source-pick-first-password 'copilot-agent-gemini-test-stub)
 
 ;;; ---------- Fixture Data ----------
 
@@ -427,7 +429,7 @@
   ;; If :nowait were present the call would signal an error; verify it succeeds.
   (let (err)
     (condition-case e
-        (let ((port (copilot-agent-gemini--start-callback-server)))
+        (let ((_port (copilot-agent-gemini--start-callback-server)))
           (when (process-live-p copilot-agent-gemini--oauth-server)
             (delete-process copilot-agent-gemini--oauth-server))
           (setq copilot-agent-gemini--oauth-server nil

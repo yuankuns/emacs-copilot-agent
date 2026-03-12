@@ -19,13 +19,14 @@
   (dolist (d (list root (expand-file-name "providers" root)))
     (unless (member d load-path) (push d load-path))))
 
-;; Stub auth-source so tests don't need real credentials
 (require 'auth-source)
-(cl-letf (((symbol-function 'auth-source-pick-first-password)
-           (lambda (&rest _) "test-api-key")))
-  (require 'copilot-agent-tools)
-  (require 'copilot-agent-api)
-  (require 'copilot-agent-anthropic))
+(advice-add 'auth-source-pick-first-password :override
+            (lambda (&rest _) "test-api-key-stub")
+            '((name . copilot-agent-anthropic-test-stub)))
+(require 'copilot-agent-tools)
+(require 'copilot-agent-api)
+(require 'copilot-agent-anthropic)
+(advice-remove 'auth-source-pick-first-password 'copilot-agent-anthropic-test-stub)
 
 ;;; ---------- Fixture Data ----------
 

@@ -17,11 +17,13 @@
     (unless (member d load-path) (push d load-path))))
 
 (require 'auth-source)
-(cl-letf (((symbol-function 'auth-source-pick-first-password)
-           (lambda (&rest _) "test-key")))
-  (require 'copilot-agent-tools)
-  (require 'copilot-agent-api)
-  (require 'copilot-agent-status))
+(advice-add 'auth-source-pick-first-password :override
+            (lambda (&rest _) "test-key-stub")
+            '((name . copilot-agent-status-test-stub)))
+(require 'copilot-agent-tools)
+(require 'copilot-agent-api)
+(require 'copilot-agent-status)
+(advice-remove 'auth-source-pick-first-password 'copilot-agent-status-test-stub)
 
 ;;; ---------- Token formatting ----------
 

@@ -22,6 +22,15 @@
 (require 'subr-x)
 (require 'copilot-agent-api)
 
+;; Compile-time-only declarations to suppress byte-compiler warnings.
+;; copilot-agent-provider is a defcustom in copilot-agent.el (loaded after
+;; this file), so we must not defvar it at runtime lest we shadow the default.
+(eval-when-compile
+  (defvar copilot-agent-provider nil
+    "Currently active provider symbol."))
+(declare-function copilot-agent-new-chat      "copilot-agent" ())
+(declare-function copilot-agent-clear-history "copilot-agent" ())
+
 ;;; ---------- Faces ----------
 
 (defgroup copilot-agent-faces nil

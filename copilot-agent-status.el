@@ -12,6 +12,17 @@
 
 (require 'copilot-agent-api)
 
+;; Compile-time-only declarations to suppress byte-compiler warnings.
+;; copilot-agent-gemini-auth-mode is a defcustom in copilot-agent-gemini.el;
+;; wrapping in eval-when-compile avoids shadowing its default at runtime.
+(eval-when-compile
+  (defvar copilot-agent-gemini-auth-mode nil
+    "Gemini authentication mode (api-key or cli)."))
+(declare-function copilot-agent-gemini--cli-load-creds         "copilot-agent-gemini" ())
+(declare-function copilot-agent-gemini--cli-valid-access-token "copilot-agent-gemini" ())
+(declare-function copilot-agent-gemini--api-key                "copilot-agent-gemini" ())
+(declare-function copilot-agent-qwen--load-creds               "copilot-agent-qwen"   ())
+
 ;;; ---------- Known model metadata ----------
 
 (defconst copilot-agent-status--known-models

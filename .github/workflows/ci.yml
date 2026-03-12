@@ -7,6 +7,22 @@ on:
     branches: [master]
 
 jobs:
+  lexical-binding:
+    name: Check lexical-binding directives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all .el files have lexical-binding on line 1
+        run: |
+          bad=$(find . -name "*.el" | while read f; do
+            head -1 "$f" | grep -qF "lexical-binding: t" || echo "$f"
+          done)
+          if [ -n "$bad" ]; then
+            echo "Files missing lexical-binding directive:"
+            echo "$bad"
+            exit 1
+          fi
+
   byte-compile:
     name: Byte-compile (Emacs ${{ matrix.emacs-version }})
     runs-on: ubuntu-latest
@@ -21,6 +37,7 @@ jobs:
       - name: Byte-compile all source files
         run: |
           emacs --batch -L . -L providers \
+            --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
             copilot-agent-tools.el \
             copilot-agent-api.el \
@@ -31,6 +48,19 @@ jobs:
             providers/copilot-agent-qwen.el \
             providers/copilot-agent-github-copilot.el \
             copilot-agent.el
+      - name: Byte-compile test files
+        run: |
+          emacs --batch -L . -L providers -L test \
+            --eval '(setq byte-compile-error-on-warn t)' \
+            -f batch-byte-compile \
+            test/test-copilot-agent-tools.el \
+            test/test-copilot-agent-api.el \
+            test/test-copilot-agent-anthropic.el \
+            test/test-copilot-agent-gemini.el \
+            test/test-copilot-agent-qwen.el \
+            test/test-copilot-agent-status.el \
+            test/test-copilot-agent-ui.el \
+            test/test-regressions.el
 
   ert-tests:
     name: ERT tests (Emacs ${{ matrix.emacs-version }})
