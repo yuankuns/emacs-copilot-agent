@@ -27,8 +27,8 @@
 ;; matches what -L flags and most load-path entries use, avoiding duplicates.
 (eval-and-compile
   (let* ((base     (or load-file-name
-                       (locate-library "copilot-agent-api")
-                       buffer-file-name))
+                       buffer-file-name
+                       (locate-library "copilot-agent-api")))
          (prov-dir (and base
                         (directory-file-name
                          (expand-file-name "providers"

@@ -595,5 +595,37 @@ Catches issues like invalid lambda variable names, unbalanced parens, etc."
           (when (file-exists-p tmp) (delete-file tmp)))))
     (should-not error-log)))
 
+;;; ============================================================
+;; BUG 13: providers/ not on load-path after package-vc-install
+;;
+;; Symptom: (require 'copilot-agent-qwen) failed with "Cannot open load
+;;          file" because package-vc-install only adds the package root to
+;;          load-path, not subdirectories.  The byte-compiler also hit this
+;;          during compilation of test files in the same pass.
+;;
+;; Root cause: Provider files live in providers/ which was never added to
+;;             load-path.  copilot-agent-load-providers used full paths so
+;;             initial loading worked, but any subsequent (require ...) call
+;;             (e.g. from copilot-agent-status) failed.
+;;
+;; Fix: eval-and-compile block in copilot-agent-api.el (required by all
+;;      entry points) adds providers/ to load-path at both compile time
+;;      and load time.
+;; ============================================================
+
+(ert-deftest regression/providers-on-load-path-after-require-api ()
+  "Requiring copilot-agent-api must add providers/ to load-path.
+Simulates package-vc-install which only puts the package root on
+load-path, then verifies that provider features are findable."
+  (let* ((root     (expand-file-name
+                    ".." (file-name-directory (or load-file-name buffer-file-name))))
+         (prov-dir (directory-file-name (expand-file-name "providers" root))))
+    ;; providers/ must be on load-path (copilot-agent-api already required above)
+    (should (member prov-dir load-path))
+    ;; Provider features must be requireable
+    (should (require 'copilot-agent-qwen      nil t))
+    (should (require 'copilot-agent-anthropic nil t))
+    (should (require 'copilot-agent-gemini    nil t))))
+
 (provide 'test-regressions)
 ;;; test-regressions.el ends here
