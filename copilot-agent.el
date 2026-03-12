@@ -35,6 +35,13 @@
 (require 'copilot-agent-ui)
 (require 'copilot-agent-status)
 
+;; Optional flycheck integration — declared here to silence byte-compiler warnings.
+(defvar flycheck-current-errors)
+(declare-function flycheck-error-line    "flycheck" (err))
+(declare-function flycheck-error-column  "flycheck" (err))
+(declare-function flycheck-error-level   "flycheck" (err))
+(declare-function flycheck-error-message "flycheck" (err))
+
 ;;; ---------- Customisation ----------
 
 (defgroup copilot-agent nil
@@ -291,11 +298,15 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 ;; Load providers so they self-register via `with-eval-after-load'.
 (defun copilot-agent-load-providers ()
   "Load all bundled providers."
-  (let ((dir (file-name-directory (or load-file-name buffer-file-name))))
-    (load (expand-file-name "providers/copilot-agent-anthropic"      dir) t)
-    (load (expand-file-name "providers/copilot-agent-gemini"         dir) t)
-    (load (expand-file-name "providers/copilot-agent-qwen"           dir) t)
-    (load (expand-file-name "providers/copilot-agent-github-copilot" dir) t)))
+  (let* ((dir      (file-name-directory (or load-file-name buffer-file-name)))
+         (prov-dir (expand-file-name "providers" dir)))
+    ;; Add providers/ to load-path so (require 'copilot-agent-*) works after
+    ;; package-vc-install (which only adds the root directory).
+    (add-to-list 'load-path prov-dir)
+    (load (expand-file-name "copilot-agent-anthropic"      prov-dir) t)
+    (load (expand-file-name "copilot-agent-gemini"         prov-dir) t)
+    (load (expand-file-name "copilot-agent-qwen"           prov-dir) t)
+    (load (expand-file-name "copilot-agent-github-copilot" prov-dir) t)))
 
 (copilot-agent-load-providers)
 
