@@ -12,6 +12,13 @@
 
 (require 'copilot-agent-api)
 
+;; Optional provider-specific symbols declared to suppress byte-compiler warnings
+(defvar copilot-agent-gemini-auth-mode)
+(declare-function copilot-agent-gemini--cli-load-creds         "copilot-agent-gemini" ())
+(declare-function copilot-agent-gemini--cli-valid-access-token "copilot-agent-gemini" ())
+(declare-function copilot-agent-gemini--api-key                "copilot-agent-gemini" ())
+(declare-function copilot-agent-qwen--load-creds               "copilot-agent-qwen"   ())
+
 ;;; ---------- Known model metadata ----------
 
 (defconst copilot-agent-status--known-models

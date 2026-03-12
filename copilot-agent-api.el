@@ -64,7 +64,7 @@ Required plist keys:
   "Return list of registered provider symbols."
   (let (result)
     (maphash (lambda (k _) (push k result)) copilot-agent-api--providers)
-    (sort result #'string< )))
+    (sort result (lambda (a b) (string< (symbol-name a) (symbol-name b))))))
 
 ;;; ---------- Session ----------
 
@@ -75,7 +75,7 @@ Optional KWARGS override defaults:
   :system-prompt  - string prepended as system instruction
   :max-tokens     - integer (default 8192)
   :context-buffer - buffer whose directory becomes the tool cwd
-  :tools          - tool schema list (defaults to copilot-agent-tools-schema)
+  :tools          - tool schema list (defaults to `copilot-agent-tools-schema')
   :approve-all    - t to skip per-tool approval prompts"
   (copilot-agent-api--get-provider provider)   ; validate early
   (let* ((p     (copilot-agent-api--get-provider provider))
@@ -110,8 +110,8 @@ appear in any API response body.")
 
 (defun copilot-agent-api--curl-post (url headers json-body callback)
   "POST JSON-BODY string to URL with HEADERS list asynchronously via curl.
-CALLBACK is called as (BODY-STRING NIL) on success or (NIL ERROR-STRING) on
-failure."
+CALLBACK is called as (BODY-STRING NIL) on success or
+(NIL ERROR-STRING) on failure."
   (let* ((req-file (make-temp-file "copilot-agent-req" nil ".json"))
          (resp-buf (generate-new-buffer " *copilot-agent-http*")))
     (write-region json-body nil req-file nil 'silent)

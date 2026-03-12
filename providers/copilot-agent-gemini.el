@@ -119,8 +119,8 @@ Returns parsed JSON alist or signals an error."
 
 (defun copilot-agent-gemini--find-cli-oauth2-js ()
   "Return path to the Gemini CLI's oauth2.js file, or nil if not found.
-Resolves the real path of the `gemini' binary and walks up the directory
-tree to find node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js."
+Resolves the real path of the `gemini' binary and walks up the directory tree
+to find node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js."
   (let* ((bin  (executable-find "gemini"))
          (real (and bin (file-truename bin)))
          (dir  (and real (file-name-directory real)))
@@ -212,7 +212,8 @@ Returns the assigned port number."
   "Path where Gemini CLI OAuth tokens are stored.")
 
 (defun copilot-agent-gemini--cli-save-creds (access refresh expires &optional project)
-  "Save ACCESS, REFRESH tokens, EXPIRES (ms) and optional PROJECT ID to the credentials file."
+  "Save ACCESS, REFRESH tokens, EXPIRES (ms) and optional PROJECT ID.
+Writes to the credentials file."
   (make-directory (file-name-directory copilot-agent-gemini--cli-creds-file) t)
   (with-temp-file copilot-agent-gemini--cli-creds-file
     (insert (json-encode `((access_token  . ,access)
@@ -509,10 +510,10 @@ CONTENT may be a string (simple text) or a vector of content blocks."
    (t (vector `((text . ,(format "%s" content)))))))
 
 (defun copilot-agent-gemini--native-parts-p (content)
-  "Return t if CONTENT is a native Gemini parts vector (not canonical typed blocks).
-Native Gemini parts have keys like `text'/`functionCall'/`thought'; canonical
-blocks always carry a `type' key.  This lets convert-message pass native parts
-through unchanged, preserving `thoughtSignature' fields required by thinking models."
+  "Return t if CONTENT is a native Gemini parts vector.
+Native parts have keys like `text', `functionCall', or `thought'; canonical
+blocks always carry a `type' key.  This lets convert-message pass native
+parts through unchanged, preserving `thoughtSignature' for thinking models."
   (and content
        (or (vectorp content) (listp content))
        (let ((first (if (vectorp content)
@@ -524,8 +525,8 @@ through unchanged, preserving `thoughtSignature' fields required by thinking mod
   "Convert a canonical message alist MSG to Gemini wire format.
 Three cases for the message content:
   1. MSG has a `parts' key — already Gemini format (tool-result messages).
-  2. MSG `content' is native Gemini parts (no canonical `type' key) — pass through
-     unchanged so `thoughtSignature' fields are preserved for thinking models.
+  2. MSG `content' is native Gemini parts (no canonical `type' key) —
+     pass through so `thoughtSignature' fields are preserved.
   3. Otherwise convert canonical typed blocks via `canonical->parts'."
   (let ((role    (cdr (assq 'role msg)))
         (content (cdr (assq 'content msg)))
@@ -612,7 +613,7 @@ Returns plist with :text :tool-calls :stop-reason :raw-content :error."
 (defun copilot-agent-gemini-send (session callback)
   "Send SESSION to Gemini API asynchronously.
 CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING).
-Dispatches to API-key or CLI-OAuth mode based on `copilot-agent-gemini-auth-mode'."
+Dispatches based on `copilot-agent-gemini-auth-mode'."
   (if (eq copilot-agent-gemini-auth-mode 'cli)
       (copilot-agent-gemini--send-cli session callback)
     (copilot-agent-gemini--send-api-key session callback)))

@@ -22,6 +22,13 @@
 (require 'subr-x)
 (require 'copilot-agent-api)
 
+;; Declared here to suppress byte-compiler free-variable/function warnings.
+;; Defined in copilot-agent.el which loads after this file.
+(defvar copilot-agent-provider nil
+  "Currently active provider symbol.")
+(declare-function copilot-agent-new-chat    "copilot-agent" ())
+(declare-function copilot-agent-clear-history "copilot-agent" ())
+
 ;;; ---------- Faces ----------
 
 (defgroup copilot-agent-faces nil
