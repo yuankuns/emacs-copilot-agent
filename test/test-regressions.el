@@ -614,18 +614,20 @@ Catches issues like invalid lambda variable names, unbalanced parens, etc."
 ;; ============================================================
 
 (ert-deftest regression/providers-on-load-path-after-require-api ()
-  "Requiring copilot-agent-api must add providers/ to load-path.
-Simulates package-vc-install which only puts the package root on
-load-path, then verifies that provider features are findable."
+  "Loading copilot-agent-api must add providers/ to load-path.
+Verifies the eval-and-compile block ran and produced the correct result:
+providers/ is on load-path and all provider features are requireable.
+This catches regressions where the load-path setup is removed or broken."
   (let* ((root     (expand-file-name
                     ".." (file-name-directory (or load-file-name buffer-file-name))))
          (prov-dir (directory-file-name (expand-file-name "providers" root))))
-    ;; providers/ must be on load-path (copilot-agent-api already required above)
+    ;; providers/ must be on load-path as a result of loading copilot-agent-api
     (should (member prov-dir load-path))
-    ;; Provider features must be requireable
-    (should (require 'copilot-agent-qwen      nil t))
-    (should (require 'copilot-agent-anthropic nil t))
-    (should (require 'copilot-agent-gemini    nil t))))
+    ;; All provider features must be requireable (no hard errors)
+    (should (require 'copilot-agent-qwen          nil t))
+    (should (require 'copilot-agent-anthropic      nil t))
+    (should (require 'copilot-agent-gemini         nil t))
+    (should (require 'copilot-agent-github-copilot nil t))))
 
 (provide 'test-regressions)
 ;;; test-regressions.el ends here
