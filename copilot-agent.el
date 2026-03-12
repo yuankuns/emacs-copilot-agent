@@ -296,28 +296,34 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 ;;; ---------- Autoloads for Providers ----------
 
 ;; Add providers/ to load-path so (require 'copilot-agent-*) works after
-;; package-vc-install (which only adds the package root).
+;; package-vc-install (which only adds the package root directory).  This
+;; complements copilot-agent-load-providers so autoloaded entry points that
+;; run before or without calling that function also see providers on load-path.
 ;;
 ;; eval-and-compile is essential: the byte-compiler does NOT evaluate plain
 ;; top-level `let' forms, so without it providers/ would never be on
 ;; load-path during byte-compilation of this package's own test files,
 ;; causing a hard "Cannot open load file" error for (require 'copilot-agent-qwen).
 (eval-and-compile
-  (let* ((dir      (file-name-directory
-                    (or load-file-name
-                        (locate-library "copilot-agent")
-                        buffer-file-name)))
-         (prov-dir (and dir (file-name-as-directory
-                             (expand-file-name "providers" dir)))))
+  (let* ((base     (or load-file-name
+                       (locate-library "copilot-agent")
+                       buffer-file-name))
+         (prov-dir (and base
+                        (file-name-as-directory
+                         (expand-file-name "providers"
+                                           (file-name-directory base))))))
     (when (and prov-dir (file-directory-p prov-dir))
       (add-to-list 'load-path prov-dir))))
 
 ;; Load providers so they self-register via `with-eval-after-load'.
 (defun copilot-agent-load-providers ()
   "Load all bundled providers."
-  (let* ((dir      (file-name-directory (or load-file-name buffer-file-name)))
-         (prov-dir (file-name-as-directory (expand-file-name "providers" dir))))
-    (when (file-directory-p prov-dir)
+  (let* ((base     (or load-file-name buffer-file-name))
+         (prov-dir (and base
+                        (file-name-as-directory
+                         (expand-file-name "providers"
+                                           (file-name-directory base))))))
+    (when (and prov-dir (file-directory-p prov-dir))
       (load (expand-file-name "copilot-agent-anthropic"      prov-dir) t)
       (load (expand-file-name "copilot-agent-gemini"         prov-dir) t)
       (load (expand-file-name "copilot-agent-qwen"           prov-dir) t)
