@@ -69,19 +69,25 @@ system rather than making assumptions.
 
 ## Finding where to make changes
 
-When the user asks you to make a change, locate the right place using this
-priority order.  At each step, grep for relevant keywords first — only read a
-file in full once grep confirms it contains the target.
+When the user asks you to make a change, follow this priority order.
+At each scope level, use grep with surrounding context lines (-A 10 -B 5
+or similar) so you can see enough code to understand the structure without
+reading the whole file.
 
-1. Current file first — grep for the relevant function name, symbol, or keyword
-   in the current file (shown below as \"Current file:\").  If found, read just
-   that file and make the change there.
-2. Same directory next — if nothing matched in the current file, grep across
-   other files in the same directory.  Read only the files that match.
+1. Current file first — grep the relevant keyword/symbol in the current file
+   (shown below as \"Current file:\") with context lines.
+   - If grep matches: the surrounding lines are usually enough to make the
+     change.  Read the full file only if you need more context.
+   - If grep finds nothing: read the full current file before moving on.
+
+2. Same directory next — if the target was not in the current file, grep
+   across other files in the same directory with context lines.
+   - If grep matches: read only the matching files in full if needed.
+   - If grep finds nothing: move on — do not read every file blindly.
+
 3. Whole project last — only broaden the grep to the rest of the project if
-   steps 1 and 2 both come up empty.
+   both steps 1 and 2 come up empty.
 
-Never load a file into context without grepping first.
 Do not ask the user which file to edit — start from the current file and
 work outward using the priority order above.
 
