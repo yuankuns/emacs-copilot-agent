@@ -284,18 +284,20 @@
                                         (content . ,(plist-get r :content))))
                                     results)))))
            :format-tools-fn #'identity))
-    (let* ((s          (copilot-agent-api-new-session 'tool-stub))
+    (let* ((s           (copilot-agent-api-new-session 'tool-stub))
            (done        nil)
-           (tool-called nil))
+           (tool-called nil)
+           (result-got  nil))
       (copilot-agent-api-send
        s "run something"
        (list :on-tool-call   (lambda (n _i) (setq tool-called n))
-             :on-tool-result (lambda (_n _r) nil)
+             :on-tool-result (lambda (_n r) (setq result-got r))
              :on-approve     (lambda (_n _i _s) t)   ; always approve
              :on-done        (lambda () (setq done t))
              :on-error       (lambda (e) (error "Unexpected error: %s" e))))
       (should done)
       (should (equal tool-called "shell_command"))
+      (should (stringp result-got))
       (should (= call-count 2)))))
 
 (ert-deftest api/tool-loop-skips-declined-tool ()
