@@ -295,18 +295,25 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 
 ;;; ---------- Autoloads for Providers ----------
 
+;; Add providers/ to load-path at top level so (require 'copilot-agent-*)
+;; works from any entry point after package-vc-install (which only adds the
+;; package root directory).  Done here rather than inside copilot-agent-load-providers
+;; so autoloaded entry points that don't call that function also benefit.
+(let* ((dir      (file-name-directory (or load-file-name buffer-file-name)))
+       (prov-dir (file-name-as-directory (expand-file-name "providers" dir))))
+  (when (file-directory-p prov-dir)
+    (add-to-list 'load-path prov-dir)))
+
 ;; Load providers so they self-register via `with-eval-after-load'.
 (defun copilot-agent-load-providers ()
   "Load all bundled providers."
   (let* ((dir      (file-name-directory (or load-file-name buffer-file-name)))
-         (prov-dir (expand-file-name "providers" dir)))
-    ;; Add providers/ to load-path so (require 'copilot-agent-*) works after
-    ;; package-vc-install (which only adds the root directory).
-    (add-to-list 'load-path prov-dir)
-    (load (expand-file-name "copilot-agent-anthropic"      prov-dir) t)
-    (load (expand-file-name "copilot-agent-gemini"         prov-dir) t)
-    (load (expand-file-name "copilot-agent-qwen"           prov-dir) t)
-    (load (expand-file-name "copilot-agent-github-copilot" prov-dir) t)))
+         (prov-dir (file-name-as-directory (expand-file-name "providers" dir))))
+    (when (file-directory-p prov-dir)
+      (load (expand-file-name "copilot-agent-anthropic"      prov-dir) t)
+      (load (expand-file-name "copilot-agent-gemini"         prov-dir) t)
+      (load (expand-file-name "copilot-agent-qwen"           prov-dir) t)
+      (load (expand-file-name "copilot-agent-github-copilot" prov-dir) t))))
 
 (copilot-agent-load-providers)
 
