@@ -74,6 +74,10 @@ At each scope level, use grep with surrounding context lines (-A 10 -B 5
 or similar) so you can see enough code to understand the structure without
 reading the whole file.
 
+0. Explicitly named file — if the user's message mentions a specific file
+   by name or path, read that file first and focus the change there.
+   Skip steps 1–3 unless the change also touches other files.
+
 1. Current file first — grep the relevant keyword/symbol in the current file
    (shown below as \"Current file:\") with context lines.
    - If grep matches: the surrounding lines are usually enough to make the
@@ -86,7 +90,7 @@ reading the whole file.
    - If grep finds nothing: move on — do not read every file blindly.
 
 3. Whole project last — only broaden the grep to the rest of the project if
-   both steps 1 and 2 come up empty.
+   steps 1 and 2 both come up empty.
 
 Do not ask the user which file to edit — start from the current file and
 work outward using the priority order above.
