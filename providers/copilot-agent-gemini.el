@@ -338,7 +338,7 @@ and returns the resulting project ID string."
         project   ; already fully onboarded
       ;; Need to onboard: pick the default allowedTier
       (let* ((tiers        (append (cdr (assq 'allowedTiers load-res)) nil))
-             (default-tier (or (seq-find (lambda (t) (cdr (assq 'isDefault t))) tiers)
+             (default-tier (or (seq-find (lambda (tier) (cdr (assq 'isDefault tier))) tiers)
                                (error "Gemini: no allowed tiers in loadCodeAssist response")))
              (tier-id      (cdr (assq 'id default-tier)))
              (needs-proj   (eq t (cdr (assq 'userDefinedCloudaicompanionProject default-tier))))
@@ -541,9 +541,7 @@ Three cases for the message content:
 
 (defun copilot-agent-gemini--build-request (session)
   "Build the JSON request body string for SESSION."
-  (let* ((model   (or (plist-get session :model)
-                      copilot-agent-gemini-default-model))
-         (msgs    (plist-get session :messages))
+  (let* ((msgs    (plist-get session :messages))
          (tools   (plist-get session :tools))
          (system  (plist-get session :system-prompt))
          (max-tok (or (plist-get session :max-tokens) 8192))

@@ -134,9 +134,9 @@ commands target the right directory (including remote SSH via TRAMP)."
     (copilot-agent-api-send
      session prompt
      (list :on-thinking  #'copilot-agent-ui--show-thinking
-           :on-text      (lambda (t)
+           :on-text      (lambda (text)
                            (copilot-agent-ui--hide-thinking)
-                           (copilot-agent-ui-insert-assistant-text t))
+                           (copilot-agent-ui-insert-assistant-text text))
            :on-tool-call   #'copilot-agent-ui-insert-tool-call
            :on-tool-result #'copilot-agent-ui-insert-tool-result
            :on-approve     (lambda (n i s) (copilot-agent-ui-approve-tool n i s))
