@@ -32,6 +32,19 @@ jobs:
             providers/copilot-agent-qwen.el \
             providers/copilot-agent-github-copilot.el \
             copilot-agent.el
+      - name: Byte-compile test files
+        run: |
+          emacs --batch -L . -L providers -L test \
+            --eval '(setq byte-compile-error-on-warn t)' \
+            -f batch-byte-compile \
+            test/test-copilot-agent-tools.el \
+            test/test-copilot-agent-api.el \
+            test/test-copilot-agent-anthropic.el \
+            test/test-copilot-agent-gemini.el \
+            test/test-copilot-agent-qwen.el \
+            test/test-copilot-agent-status.el \
+            test/test-copilot-agent-ui.el \
+            test/test-regressions.el
 
   ert-tests:
     name: ERT tests (Emacs ${{ matrix.emacs-version }})

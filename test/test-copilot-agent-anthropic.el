@@ -21,11 +21,9 @@
 
 ;; Stub auth-source so tests don't need real credentials
 (require 'auth-source)
-(cl-letf (((symbol-function 'auth-source-pick-first-password)
-           (lambda (&rest _) "test-api-key")))
-  (require 'copilot-agent-tools)
-  (require 'copilot-agent-api)
-  (require 'copilot-agent-anthropic))
+(require 'copilot-agent-tools)
+(require 'copilot-agent-api)
+(require 'copilot-agent-anthropic)
 
 ;;; ---------- Fixture Data ----------
 

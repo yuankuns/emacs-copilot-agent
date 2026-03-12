@@ -20,6 +20,7 @@
 (require 'copilot-agent-tools)
 (require 'copilot-agent-api)
 (require 'copilot-agent-ui)
+(require 'copilot-agent-gemini)
 
 ;;; ============================================================
 ;; BUG 1: special-mode parent made buffer globally read-only

@@ -17,11 +17,9 @@
     (unless (member d load-path) (push d load-path))))
 
 (require 'auth-source)
-(cl-letf (((symbol-function 'auth-source-pick-first-password)
-           (lambda (&rest _) "test-key")))
-  (require 'copilot-agent-tools)
-  (require 'copilot-agent-api)
-  (require 'copilot-agent-status))
+(require 'copilot-agent-tools)
+(require 'copilot-agent-api)
+(require 'copilot-agent-status)
 
 ;;; ---------- Token formatting ----------
 

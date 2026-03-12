@@ -24,7 +24,8 @@
 ;;; ---------- Helpers ----------
 
 (defun api-test--make-stub-provider (&optional response)
-  "Return a minimal provider plist whose :send-fn immediately calls back with RESPONSE."
+  "Return a minimal provider plist.
+:send-fn immediately calls back with RESPONSE."
   (let ((resp (or response
                   (list :text "stub reply"
                         :tool-calls nil
@@ -45,7 +46,7 @@
           :format-tools-fn       #'identity)))
 
 (defun api-test--register-stub (&optional response)
-  "Register a stub provider as 'stub and return it."
+  "Register a stub provider as `stub' and return it."
   (let ((p (api-test--make-stub-provider response)))
     (copilot-agent-api-register-provider 'stub p)
     p))
@@ -285,12 +286,11 @@
            :format-tools-fn #'identity))
     (let* ((s          (copilot-agent-api-new-session 'tool-stub))
            (done        nil)
-           (tool-called nil)
-           (result-got  nil))
+           (tool-called nil))
       (copilot-agent-api-send
        s "run something"
        (list :on-tool-call   (lambda (n _i) (setq tool-called n))
-             :on-tool-result (lambda (_n r) (setq result-got r))
+             :on-tool-result (lambda (_n _r) nil)
              :on-approve     (lambda (_n _i _s) t)   ; always approve
              :on-done        (lambda () (setq done t))
              :on-error       (lambda (e) (error "Unexpected error: %s" e))))
