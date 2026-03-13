@@ -74,9 +74,9 @@ shell commands that may have side effects.
 ## Finding where to make changes
 
 When the user asks you to make a change, follow this priority order.
-At each scope level, use grep with surrounding context lines (-A 10 -B 5
-or similar) so you can see enough code to understand the structure without
-reading the whole file.
+At each scope level, use find_in_files with before_context/after_context
+(e.g. before_context=5, after_context=10) so you can see enough surrounding
+code to understand the structure without reading the whole file.
 
 0. Explicitly named file — if the user's message mentions a specific file
    by name or path, read that file first and focus the change there.
