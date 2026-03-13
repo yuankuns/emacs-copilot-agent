@@ -77,10 +77,13 @@ it — the user expects the file to be modified, not described.
 
 ## Finding where to make changes
 
-When the user asks you to make a change, follow this priority order.
-At each scope level, use find_in_files with before_context/after_context
-(e.g. before_context=2, after_context=5) so you can see enough surrounding
-code to understand the structure without reading the whole file.
+Only use this search-first approach when you need to LOCATE existing code
+to modify (e.g. \"fix that function\", \"rename this variable\").  For simple
+insertions or new code (e.g. \"add a hello world\", \"append a function\"),
+skip searching and use write_file directly on the current file.
+
+When you do need to locate existing code, use find_in_files with
+before_context/after_context (e.g. before_context=2, after_context=5).
 Note: find_in_files output is capped at 200 lines.  Keep context values
 small (1-5 lines); if the output is truncated, retry with a narrower path,
 a more specific pattern, or smaller context — then read the full file only
