@@ -367,6 +367,83 @@ batch mode vs an interactive Emacs session."
                      '((path . "/no/such/file.txt")))
                     :type 'error))))
 
+;;; ---------- edit_file ----------
+
+(ert-deftest tools/edit-file-basic-replacement ()
+  "edit_file replaces an exact string once and writes the file."
+  (with-temp-dir
+    (let* ((path (expand-file-name "edit.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "hello world\n" nil path)
+      (let ((result (copilot-agent-tools--edit-file
+                     `((path . ,path)
+                       (old_string . "world")
+                       (new_string . "Emacs")))))
+        (should (string-match-p "Edited" result))
+        (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
+                       "hello Emacs\n"))))))
+
+(ert-deftest tools/edit-file-not-found-signals-error ()
+  "edit_file signals an error when old_string is not in the file."
+  (with-temp-dir
+    (let* ((path (expand-file-name "nf.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "hello world\n" nil path)
+      (should-error
+       (copilot-agent-tools--edit-file
+        `((path . ,path) (old_string . "NOTHERE") (new_string . "x")))
+       :type 'error))))
+
+(ert-deftest tools/edit-file-ambiguous-signals-error ()
+  "edit_file signals an error when old_string matches more than once."
+  (with-temp-dir
+    (let* ((path (expand-file-name "dup.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "foo\nfoo\n" nil path)
+      (should-error
+       (copilot-agent-tools--edit-file
+        `((path . ,path) (old_string . "foo") (new_string . "bar")))
+       :type 'error))))
+
+(ert-deftest tools/edit-file-missing-file-signals-error ()
+  "edit_file signals an error when the file does not exist."
+  (with-temp-dir
+    (let ((copilot-agent-tools--context (list :directory default-directory)))
+      (should-error
+       (copilot-agent-tools--edit-file
+        '((path . "/no/such/file.txt") (old_string . "x") (new_string . "y")))
+       :type 'error))))
+
+(ert-deftest tools/edit-file-updates-open-buffer ()
+  "edit_file updates a buffer that already has the file open."
+  (with-temp-dir
+    (let* ((path (expand-file-name "live-edit.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "original content\n" nil path)
+      (let ((buf (find-file-noselect path)))
+        (unwind-protect
+            (progn
+              (copilot-agent-tools--edit-file
+               `((path . ,path)
+                 (old_string . "original")
+                 (new_string . "modified")))
+              (with-current-buffer buf
+                (should (string-match-p "modified" (buffer-string)))))
+          (kill-buffer buf))))))
+
+(ert-deftest tools/edit-file-dispatched-via-execute ()
+  "execute dispatches 'edit_file' correctly."
+  (with-temp-dir
+    (let* ((path (expand-file-name "disp.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "abc def\n" nil path)
+      (let ((result (copilot-agent-tools-execute
+                     "edit_file"
+                     `((path . ,path) (old_string . "abc") (new_string . "xyz")))))
+        (should (string-match-p "Edited" result))
+        (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
+                       "xyz def\n"))))))
+
 ;;; ---------- execute dispatcher ----------
 
 (ert-deftest tools/execute-dispatches-shell ()

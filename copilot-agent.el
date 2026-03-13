@@ -67,6 +67,12 @@ You have access to tools that let you run shell commands, read and write files, 
 search the codebase.  Always prefer using tools to inspect the actual state of the
 system rather than making assumptions.
 
+When modifying existing code, prefer edit_file over write_file: it replaces an exact
+string with a new string without rewriting the whole file, and preserves the undo
+history cleanly.  Use write_file only when creating a new file or replacing the entire
+content of a short file.  Only search the codebase (find_in_files) when you need to
+locate code you have not already seen — if the file path is known, read it directly.
+
 When running shell commands, be concise and targeted.  Ask for approval before
 destructive operations.  If the context directory is a remote path (TRAMP/SSH),
 your tool commands will run on the remote host automatically."

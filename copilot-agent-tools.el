@@ -80,7 +80,21 @@ Returns file:line:match triples, capped at 200 lines.")
                     (properties
                      . ((path . ((type . "string")
                                  (description . "Path to the file to delete")))))
-                    (required . ["path"])))))
+                    (required . ["path"]))))
+
+    ((name . "edit_file")
+     (description . "Make a surgical edit to a file by replacing an exact string with a new string. \
+Preferred over write_file when modifying existing code, as it avoids rewriting the whole file. \
+The old_string must match exactly once in the file; use enough context to make it unique.")
+     (parameters . ((type . "object")
+                    (properties
+                     . ((path       . ((type . "string")
+                                      (description . "Absolute or relative file path")))
+                        (old_string . ((type . "string")
+                                      (description . "Exact string to replace (must appear exactly once)")))
+                        (new_string . ((type . "string")
+                                      (description . "Replacement string")))))
+                    (required . ["path" "old_string" "new_string"])))))
   "Universal tool schema list.
 Format: list of alists with `name', `description', `parameters'.")
 
@@ -145,6 +159,7 @@ expanded against the context directory."
         ("find_in_files"    (copilot-agent-tools--find-in-files args))
         ("create_directory" (copilot-agent-tools--create-dir args))
         ("delete_file"      (copilot-agent-tools--delete-file args))
+        ("edit_file"        (copilot-agent-tools--edit-file args))
         (_ (format "Unknown tool: %s" name)))
     (error (format "Tool execution error: %s" (error-message-string err)))))
 
@@ -263,6 +278,45 @@ expanded against the context directory."
       (error "File not found: %s" path))
     (delete-file path)
     (format "Deleted: %s" path)))
+
+(defun copilot-agent-tools--edit-file (args)
+  "Replace OLD_STRING with NEW_STRING in the file at PATH.
+Signals an error if the file does not exist, if OLD_STRING is not found,
+or if OLD_STRING matches more than once (ambiguous edit)."
+  (let* ((path       (copilot-agent-tools--resolve (cdr (assq 'path args))))
+         (old-string (cdr (assq 'old_string args)))
+         (new-string (cdr (assq 'new_string args))))
+    (unless (file-exists-p path)
+      (error "File not found: %s" path))
+    (let* ((buf     (find-file-noselect path))
+           (content (with-current-buffer buf (buffer-string)))
+           ;; Count occurrences using plain string search (no regex).
+           (count   (let ((pos 0) (n 0))
+                      (while (setq pos (string-search old-string content pos))
+                        (setq n (1+ n))
+                        (setq pos (+ pos (length old-string))))
+                      n)))
+      (cond
+       ((= count 0)
+        (error "edit_file: old_string not found in %s" path))
+       ((> count 1)
+        (error "edit_file: old_string matches %d times in %s — add more context to make it unique"
+               count path)))
+      ;; Exactly one match — replace it.
+      (let ((new-content (concat
+                          (substring content 0 (string-search old-string content))
+                          new-string
+                          (substring content (+ (string-search old-string content)
+                                                (length old-string))))))
+        (with-current-buffer buf
+          (let ((inhibit-read-only t))
+            (with-undo-amalgamate
+              (erase-buffer)
+              (insert new-content))))
+        (let ((require-final-newline nil))
+          (with-current-buffer buf (save-buffer))))
+      (format "Edited %s: replaced %d chars with %d chars"
+              path (length old-string) (length new-string)))))
 
 (provide 'copilot-agent-tools)
 ;;; copilot-agent-tools.el ends here
