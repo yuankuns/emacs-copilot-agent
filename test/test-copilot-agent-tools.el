@@ -367,6 +367,200 @@ batch mode vs an interactive Emacs session."
                      '((path . "/no/such/file.txt")))
                     :type 'error))))
 
+;;; ---------- edit_file ----------
+
+(ert-deftest tools/edit-file-basic-replacement ()
+  "edit_file replaces an exact string once and writes the file."
+  (with-temp-dir
+    (let* ((path (expand-file-name "edit.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "hello world\n" nil path)
+      (let ((result (copilot-agent-tools--edit-file
+                     `((path . ,path)
+                       (old_string . "world")
+                       (new_string . "Emacs")))))
+        (should (string-match-p "Edited" result))
+        (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
+                       "hello Emacs\n"))))))
+
+(ert-deftest tools/edit-file-not-found-signals-error ()
+  "edit_file signals an error when old_string is not in the file."
+  (with-temp-dir
+    (let* ((path (expand-file-name "nf.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "hello world\n" nil path)
+      (should-error
+       (copilot-agent-tools--edit-file
+        `((path . ,path) (old_string . "NOTHERE") (new_string . "x")))
+       :type 'error))))
+
+(ert-deftest tools/edit-file-ambiguous-signals-error ()
+  "edit_file signals an error when old_string matches more than once."
+  (with-temp-dir
+    (let* ((path (expand-file-name "dup.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "foo\nfoo\n" nil path)
+      (should-error
+       (copilot-agent-tools--edit-file
+        `((path . ,path) (old_string . "foo") (new_string . "bar")))
+       :type 'error))))
+
+(ert-deftest tools/edit-file-missing-file-signals-error ()
+  "edit_file signals an error when the file does not exist."
+  (with-temp-dir
+    (let ((copilot-agent-tools--context (list :directory default-directory)))
+      (should-error
+       (copilot-agent-tools--edit-file
+        '((path . "/no/such/file.txt") (old_string . "x") (new_string . "y")))
+       :type 'error))))
+
+(ert-deftest tools/edit-file-updates-open-buffer ()
+  "edit_file updates a buffer that already has the file open."
+  (with-temp-dir
+    (let* ((path (expand-file-name "live-edit.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "original content\n" nil path)
+      (let ((buf (find-file-noselect path)))
+        (unwind-protect
+            (progn
+              (copilot-agent-tools--edit-file
+               `((path . ,path)
+                 (old_string . "original")
+                 (new_string . "modified")))
+              (with-current-buffer buf
+                (should (string-match-p "modified" (buffer-string)))))
+          (kill-buffer buf))))))
+
+(ert-deftest tools/edit-file-dispatched-via-execute ()
+  "execute dispatches 'edit_file' correctly."
+  (with-temp-dir
+    (let* ((path (expand-file-name "disp.txt"))
+           (copilot-agent-tools--context (list :directory default-directory)))
+      (write-region "abc def\n" nil path)
+      (let ((result (copilot-agent-tools-execute
+                     "edit_file"
+                     `((path . ,path) (old_string . "abc") (new_string . "xyz")))))
+        (should (string-match-p "Edited" result))
+        (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
+                       "xyz def\n"))))))
+
+;;; ---------- glob ----------
+
+(ert-deftest tools/glob-finds-matching-files ()
+  "glob returns files whose names match the pattern."
+  (with-temp-dir
+    (write-region "" nil (expand-file-name "foo.el"))
+    (write-region "" nil (expand-file-name "bar.el"))
+    (write-region "" nil (expand-file-name "baz.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--glob
+                    `((pattern . "*.el") (path . ,default-directory)))))
+      (should (string-match-p "foo.el" result))
+      (should (string-match-p "bar.el" result))
+      (should-not (string-match-p "baz.txt" result)))))
+
+(ert-deftest tools/glob-no-match-reports-none ()
+  "glob reports no files when pattern matches nothing."
+  (with-temp-dir
+    (write-region "" nil (expand-file-name "hello.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--glob
+                    `((pattern . "*.el") (path . ,default-directory)))))
+      (should (string-match-p "[Nn]o files" result)))))
+
+(ert-deftest tools/glob-recurses-into-subdirs ()
+  "glob finds files in subdirectories."
+  (with-temp-dir
+    (make-directory (expand-file-name "sub"))
+    (write-region "" nil (expand-file-name "sub/nested.el"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--glob
+                    `((pattern . "*.el") (path . ,default-directory)))))
+      (should (string-match-p "nested.el" result)))))
+
+(ert-deftest tools/glob-defaults-to-context-dir ()
+  "glob uses the context directory when no path is given."
+  (with-temp-dir
+    (write-region "" nil (expand-file-name "ctx.el"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--glob '((pattern . "*.el")))))
+      (should (string-match-p "ctx.el" result)))))
+
+(ert-deftest tools/glob-dispatched-via-execute ()
+  "execute dispatches 'glob' correctly."
+  (with-temp-dir
+    (write-region "" nil (expand-file-name "disp.el"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools-execute
+                    "glob" `((pattern . "*.el") (path . ,default-directory)))))
+      (should (string-match-p "disp.el" result)))))
+
+;;; ---------- grep ----------
+
+(ert-deftest tools/grep-finds-pattern ()
+  "grep returns lines matching the pattern."
+  (with-temp-dir
+    (write-region "apple\nbanana\napricot\n" nil (expand-file-name "f.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--grep
+                    `((pattern . "ap") (path . ,default-directory)))))
+      (should (string-match-p "apple" result))
+      (should (string-match-p "apricot" result))
+      (should-not (string-match-p "banana" result)))))
+
+(ert-deftest tools/grep-no-match-reports-none ()
+  "grep reports no matches when pattern is absent."
+  (with-temp-dir
+    (write-region "hello world\n" nil (expand-file-name "g.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--grep
+                    `((pattern . "ZZZNOMATCH") (path . ,default-directory)))))
+      (should (string-match-p "[Nn]o match" result)))))
+
+(ert-deftest tools/grep-after-context ()
+  "grep includes lines after each match when after_context > 0."
+  (with-temp-dir
+    (write-region "MATCH\nline-after\nother\n" nil (expand-file-name "ctx.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--grep
+                    `((pattern . "MATCH")
+                      (path    . ,default-directory)
+                      (after_context . 1)))))
+      (should (string-match-p "line-after" result)))))
+
+(ert-deftest tools/grep-before-context ()
+  "grep includes lines before each match when before_context > 0."
+  (with-temp-dir
+    (write-region "line-before\nMATCH\nother\n" nil (expand-file-name "bctx.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--grep
+                    `((pattern . "MATCH")
+                      (path    . ,default-directory)
+                      (before_context . 1)))))
+      (should (string-match-p "line-before" result)))))
+
+(ert-deftest tools/grep-glob-filter ()
+  "grep respects the glob filter and excludes non-matching files."
+  (with-temp-dir
+    (write-region "target\n" nil (expand-file-name "match.py"))
+    (write-region "target\n" nil (expand-file-name "nomatch.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--grep
+                    `((pattern . "target")
+                      (path    . ,default-directory)
+                      (glob    . "*.py")))))
+      (should     (string-match-p "match.py"    result))
+      (should-not (string-match-p "nomatch.txt" result)))))
+
+(ert-deftest tools/grep-dispatched-via-execute ()
+  "execute dispatches 'grep' correctly."
+  (with-temp-dir
+    (write-region "hello grep\n" nil (expand-file-name "d.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools-execute
+                    "grep" `((pattern . "hello") (path . ,default-directory)))))
+      (should (string-match-p "hello" result)))))
+
 ;;; ---------- execute dispatcher ----------
 
 (ert-deftest tools/execute-dispatches-shell ()
