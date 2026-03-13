@@ -66,6 +66,37 @@ Returns file:line:match triples, capped at 200 lines.")
                                    (description . "Filename glob filter, e.g. '*.py' (optional)")))))
                     (required . ["pattern"]))))
 
+    ((name . "glob")
+     (description . "Find files whose names match a glob pattern (e.g. \"*.el\", \"test_*.py\"). \
+Returns relative paths one per line, sorted. Use this to discover files by name \
+without reading their contents.")
+     (parameters . ((type . "object")
+                    (properties
+                     . ((pattern . ((type . "string")
+                                   (description . "Filename glob, e.g. \"*.el\" or \"test_*.py\"")))
+                        (path    . ((type . "string")
+                                   (description . "Root directory to search (defaults to context directory)")))))
+                    (required . ["pattern"]))))
+
+    ((name . "grep")
+     (description . "Search for a regex pattern in file contents, returning \
+file:line:match triples with optional surrounding context lines. \
+Prefer this over read_file when you need to find specific content without \
+loading the whole file.")
+     (parameters . ((type . "object")
+                    (properties
+                     . ((pattern        . ((type . "string")
+                                          (description . "Extended-regex pattern to search")))
+                        (path           . ((type . "string")
+                                          (description . "Root directory or file to search")))
+                        (glob           . ((type . "string")
+                                          (description . "Filename glob filter, e.g. \"*.py\" (optional)")))
+                        (before_context . ((type . "integer")
+                                          (description . "Lines of context before each match (default 0)")))
+                        (after_context  . ((type . "integer")
+                                          (description . "Lines of context after each match (default 0)")))))
+                    (required . ["pattern"]))))
+
     ((name . "create_directory")
      (description . "Create a directory, including any missing parent directories.")
      (parameters . ((type . "object")
@@ -157,6 +188,8 @@ expanded against the context directory."
         ("write_file"       (copilot-agent-tools--write-file args))
         ("list_directory"   (copilot-agent-tools--list-dir args))
         ("find_in_files"    (copilot-agent-tools--find-in-files args))
+        ("glob"             (copilot-agent-tools--glob args))
+        ("grep"             (copilot-agent-tools--grep args))
         ("create_directory" (copilot-agent-tools--create-dir args))
         ("delete_file"      (copilot-agent-tools--delete-file args))
         ("edit_file"        (copilot-agent-tools--edit-file args))
@@ -317,6 +350,65 @@ or if OLD_STRING matches more than once (ambiguous edit)."
           (with-current-buffer buf (save-buffer))))
       (format "Edited %s: replaced %d chars with %d chars"
               path (length old-string) (length new-string)))))
+
+(defun copilot-agent-tools--glob (args)
+  "Find files under PATH whose names match PATTERN (a shell glob like *.el).
+Uses `find -name' so it recurses into subdirectories and is TRAMP-aware
+via `process-file'.  Returns relative paths, one per line, sorted."
+  (let* ((pattern  (cdr (assq 'pattern args)))
+         (raw-path (cdr (assq 'path args)))
+         (base     (if (and raw-path (not (string-empty-p raw-path)))
+                       (copilot-agent-tools--resolve raw-path)
+                     (copilot-agent-tools--ctx-dir)))
+         ;; Use only the filename portion for -name; strip any leading **/ or path prefix.
+         (name-pat (file-name-nondirectory pattern))
+         (default-directory base)
+         (cmd (format "find . -type f -name '%s' | sort" name-pat)))
+    (with-temp-buffer
+      (process-file shell-file-name nil t nil shell-command-switch cmd)
+      (let* ((out   (string-trim (buffer-string)))
+             (lines (if (string-empty-p out) nil (split-string out "\n" t))))
+        (if (null lines)
+            (format "No files matching '%s' under %s" pattern base)
+          (let ((capped (if (> (length lines) 500)
+                            (append (seq-take lines 500)
+                                    (list (format "... (%d more files omitted)"
+                                                  (- (length lines) 500))))
+                          lines)))
+            (mapconcat #'identity capped "\n")))))))
+
+(defun copilot-agent-tools--grep (args)
+  "Search for PATTERN in files under PATH with optional context lines.
+Like `find_in_files' but supports BEFORE_CONTEXT and AFTER_CONTEXT."
+  (let* ((pattern  (cdr (assq 'pattern args)))
+         (raw-path (cdr (assq 'path args)))
+         (glob     (cdr (assq 'glob args)))
+         (before   (let ((v (cdr (assq 'before_context args))))
+                     (if (and v (wholenump v)) v 0)))
+         (after    (let ((v (cdr (assq 'after_context args))))
+                     (if (and v (wholenump v)) v 0)))
+         (path     (if (and raw-path (not (string-empty-p raw-path)))
+                       (copilot-agent-tools--resolve raw-path)
+                     (copilot-agent-tools--ctx-dir)))
+         (default-directory path)
+         (include-flag (if (and glob (not (string-empty-p glob)))
+                           (format "--include='%s' " glob)
+                         ""))
+         (ctx-flags (concat (if (> before 0) (format "-B %d " before) "")
+                            (if (> after 0)  (format "-A %d " after)  "")))
+         (cmd (format "grep -rn -E %s%s'%s' ." include-flag ctx-flags pattern)))
+    (with-temp-buffer
+      (process-file shell-file-name nil t nil shell-command-switch cmd)
+      (let* ((out   (buffer-string))
+             (lines (split-string out "\n" t)))
+        (if (null lines)
+            (format "No matches for '%s'" pattern)
+          (let ((capped (if (> (length lines) 200)
+                            (append (seq-take lines 200)
+                                    (list (format "... (%d more lines omitted)"
+                                                  (- (length lines) 200))))
+                          lines)))
+            (mapconcat #'identity capped "\n")))))))
 
 (provide 'copilot-agent-tools)
 ;;; copilot-agent-tools.el ends here

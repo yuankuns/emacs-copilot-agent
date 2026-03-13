@@ -70,8 +70,17 @@ system rather than making assumptions.
 When modifying existing code, prefer edit_file over write_file: it replaces an exact
 string with a new string without rewriting the whole file, and preserves the undo
 history cleanly.  Use write_file only when creating a new file or replacing the entire
-content of a short file.  Only search the codebase (find_in_files) when you need to
-locate code you have not already seen — if the file path is known, read it directly.
+content of a short file.
+
+For discovery tasks, use the targeted search tools rather than reading full files:
+  - glob: find files by name pattern (e.g. \"*.el\") without loading their contents
+  - grep: search file contents with optional context lines; prefer this over
+    read_file when you only need to find specific symbols or patterns
+  - find_in_files: basic grep without context lines (retained for compatibility)
+
+Only call read_file when you need to understand the full structure of a file.
+If the file path is already known, go straight to read_file or edit_file — do
+not run glob or grep first just to confirm the file exists.
 
 When running shell commands, be concise and targeted.  Ask for approval before
 destructive operations.  If the context directory is a remote path (TRAMP/SSH),

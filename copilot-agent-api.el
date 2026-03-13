@@ -165,7 +165,7 @@ Handles: hash-table (from json-parse-string), alist, plist, nil."
 ;;; ---------- Tool Approval ----------
 
 (defconst copilot-agent-api--auto-approved-tools
-  '("read_file" "write_file" "list_directory" "find_in_files" "edit_file")
+  '("read_file" "write_file" "list_directory" "find_in_files" "glob" "grep" "edit_file")
   "Tools that are automatically approved without prompting the user.
 These are read-only or low-risk write operations where interrupting the
 agentic loop for approval provides little safety benefit.")
