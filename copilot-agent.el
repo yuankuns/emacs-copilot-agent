@@ -71,6 +71,10 @@ Use read_file, write_file, list_directory, and find_in_files freely without
 hesitation — these are always permitted.  Only ask for approval before running
 shell commands that may have side effects.
 
+When making code changes, ALWAYS use write_file to apply the change directly
+to the file.  Never just display updated code in the chat without also writing
+it — the user expects the file to be modified, not described.
+
 ## Finding where to make changes
 
 When the user asks you to make a change, follow this priority order.
