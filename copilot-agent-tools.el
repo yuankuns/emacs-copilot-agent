@@ -237,20 +237,27 @@ expanded against the context directory."
   (let* ((pattern  (cdr (assq 'pattern args)))
          (raw-path (cdr (assq 'path args)))
          (glob     (cdr (assq 'glob args)))
-         (before   (cdr (assq 'before_context args)))
-         (after    (cdr (assq 'after_context  args)))
-         (path     (if (and raw-path (not (string-empty-p raw-path)))
+         ;; Coerce context args to integers; JSON may deliver them as floats or strings.
+         (before   (let ((v (cdr (assq 'before_context args))))
+                     (and v (not (eq v :null)) (truncate (if (stringp v) (string-to-number v) v)))))
+         (after    (let ((v (cdr (assq 'after_context args))))
+                     (and v (not (eq v :null)) (truncate (if (stringp v) (string-to-number v) v)))))
+         (resolved (if (and raw-path (not (string-empty-p raw-path)))
                        (copilot-agent-tools--resolve raw-path)
                      (copilot-agent-tools--ctx-dir)))
-         (default-directory path)
-         (glob-flag (if (and glob (not (string-empty-p glob)))
-                        (format "--include='%s' " glob)
+         ;; path may be a file — grep the file directly; if a dir, search recursively.
+         (file-p          (and (file-regular-p resolved) (not (file-directory-p resolved))))
+         (default-directory (if file-p (file-name-directory resolved) resolved))
+         (target          (if file-p (shell-quote-argument (file-name-nondirectory resolved)) "."))
+         (glob-flag (if (and glob (not (string-empty-p glob)) (not file-p))
+                        (format "--include=%s " (shell-quote-argument glob))
                       ""))
-         (ctx-flags (concat (if (and before (> before 0))
-                                (format "-B %d " before) "")
-                            (if (and after  (> after  0))
-                                (format "-A %d " after)  "")))
-         (cmd (format "grep -rn -E %s%s'%s' ." glob-flag ctx-flags pattern)))
+         (ctx-flags (concat (if (and before (> before 0)) (format "-B %d " before) "")
+                            (if (and after  (> after  0)) (format "-A %d " after)  "")))
+         ;; Use shell-quote-argument for the pattern to prevent shell injection.
+         (cmd (format "grep -rn -E %s%s%s %s"
+                      glob-flag ctx-flags
+                      (shell-quote-argument pattern) target)))
     (with-temp-buffer
       (process-file shell-file-name nil t nil shell-command-switch cmd)
       (let* ((out   (buffer-string))

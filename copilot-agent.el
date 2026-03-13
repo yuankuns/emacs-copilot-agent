@@ -82,16 +82,17 @@ code to understand the structure without reading the whole file.
    by name or path, read that file first and focus the change there.
    Skip steps 1–3 unless the change also touches other files.
 
-1. Current file first — grep the relevant keyword/symbol in the current file
-   (shown below as \"Current file:\") with context lines.
-   - If grep matches: the surrounding lines are usually enough to make the
-     change.  Read the full file only if you need more context.
-   - If grep finds nothing: read the full current file before moving on.
+1. Current file first — call find_in_files with path set to the current file
+   path (not its directory) and before_context/after_context for surrounding
+   lines.  find_in_files accepts both file paths and directories.
+   - If it matches: the context lines are usually enough to make the change.
+     Read the full file only if you need more context.
+   - If nothing matches: read the full current file before moving on.
 
-2. Same directory next — if the target was not in the current file, grep
-   across other files in the same directory with context lines.
-   - If grep matches: read only the matching files in full if needed.
-   - If grep finds nothing: move on — do not read every file blindly.
+2. Same directory next — if the target was not in the current file, call
+   find_in_files with path set to the current file's directory.
+   - If it matches: read only the matching files in full if needed.
+   - If nothing matches: move on — do not read every file blindly.
 
 3. Whole project last — only broaden the grep to the rest of the project if
    steps 1 and 2 both come up empty.
