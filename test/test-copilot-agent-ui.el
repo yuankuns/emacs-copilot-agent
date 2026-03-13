@@ -407,5 +407,23 @@ first file opened, regardless of which file the user had switched to."
         (should (eq (plist-get session :context-buffer) original)))
       (kill-buffer original))))
 
+(ert-deftest ui/refresh-context-appends-current-file-when-marker-absent ()
+  "refresh-context appends Current file: when session was opened from a non-file buffer."
+  (with-fresh-chat-buffer
+    (let* ((file-buf (get-buffer-create " *ctx-file*")))
+      (with-current-buffer file-buf
+        (setq buffer-file-name "/tmp/new.el"))
+      (let* ((non-file (get-buffer-create " *ctx-non-file*"))
+             (session  (list :context-buffer non-file
+                             :system-prompt  "base prompt with no file marker")))
+        (cl-letf (((symbol-function 'buffer-list)
+                   (lambda () (list (get-buffer copilot-agent-ui--buffer-name) file-buf)))
+                  ((symbol-function 'copilot-agent-tools-set-context) #'ignore))
+          (copilot-agent-ui--refresh-context session)
+          (should (string-match-p "Current file:.*new\\.el"
+                                  (plist-get session :system-prompt)))))
+      (with-current-buffer file-buf (setq buffer-file-name nil))
+      (kill-buffer file-buf))))
+
 (provide 'test-copilot-agent-ui)
 ;;; test-copilot-agent-ui.el ends here

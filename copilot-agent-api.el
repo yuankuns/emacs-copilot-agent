@@ -120,6 +120,7 @@ CALLBACK is called as (BODY-STRING NIL) on success or
      :buffer  resp-buf
      :command (append
                (list "curl" "--silent" "--show-error"
+                     "--max-time" "120"
                      "-w" (concat copilot-agent-api--status-sentinel "%{http_code}")
                      "-X" "POST"
                      "-H" "Content-Type: application/json")
@@ -164,11 +165,19 @@ Handles: hash-table (from json-parse-string), alist, plist, nil."
 
 ;;; ---------- Tool Approval ----------
 
+(defconst copilot-agent-api--auto-approved-tools
+  '("read_file" "write_file" "list_directory" "find_in_files")
+  "Tools that are always approved without prompting.
+These are read/write file operations that the system prompt explicitly
+permits; requiring per-call confirmation makes the agent unusable.")
+
 (defun copilot-agent-api--approve-tool (name input session on-approve-fn)
   "Return t if the user approves running tool NAME with INPUT.
-Checks SESSION :approve-all first.  Falls back to ON-APPROVE-FN if provided,
+Tools in `copilot-agent-api--auto-approved-tools' are always approved.
+Checks SESSION :approve-all next.  Falls back to ON-APPROVE-FN if provided,
 otherwise prompts in the minibuffer with [y]es / [a]ll / [n]o."
-  (or (plist-get session :approve-all)
+  (or (member name copilot-agent-api--auto-approved-tools)
+      (plist-get session :approve-all)
       (let ((approved
              (if on-approve-fn
                  (funcall on-approve-fn name input session)
@@ -217,15 +226,17 @@ CALLBACKS plist keys (all optional):
          (on-think (plist-get callbacks :on-thinking))
          (on-error (plist-get callbacks :on-error)))
     (when on-think (funcall on-think))
-    (funcall send-fn session
-             (lambda (response http-error)
-               (if http-error
-                   (progn
-                     (when (fboundp 'copilot-agent-status-record-error)
-                       (copilot-agent-status-record-error
-                        (plist-get session :provider) http-error))
-                     (when on-error (funcall on-error http-error)))
-                 (copilot-agent-api--handle-response response session callbacks))))))
+    (condition-case err
+        (funcall send-fn session
+                 (lambda (response http-error)
+                   (if http-error
+                       (progn
+                         (when (fboundp 'copilot-agent-status-record-error)
+                           (copilot-agent-status-record-error
+                            (plist-get session :provider) http-error))
+                         (when on-error (funcall on-error http-error)))
+                     (copilot-agent-api--handle-response response session callbacks))))
+      (error (when on-error (funcall on-error (error-message-string err)))))))
 
 (defun copilot-agent-api--handle-response (response session callbacks)
   "Process parsed RESPONSE plist from a provider and continue the loop."

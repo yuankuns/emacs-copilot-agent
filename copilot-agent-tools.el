@@ -55,15 +55,22 @@ if needed. Works on remote files via TRAMP.")
 
     ((name . "find_in_files")
      (description . "Search for a regex pattern inside files (like grep -rn). \
-Returns file:line:match triples, capped at 200 lines.")
+Returns matches with optional surrounding context lines. \
+Output is capped at 200 lines; context flags increase truncation risk, \
+so keep before_context/after_context small (1-3 lines). \
+If output is truncated, retry with a narrower path or smaller context.")
      (parameters . ((type . "object")
                     (properties
-                     . ((pattern . ((type . "string")
-                                   (description . "Extended-regex pattern to search")))
-                        (path    . ((type . "string")
-                                   (description . "Root directory or file to search")))
-                        (glob    . ((type . "string")
-                                   (description . "Filename glob filter, e.g. '*.py' (optional)")))))
+                     . ((pattern        . ((type . "string")
+                                          (description . "Extended-regex pattern to search")))
+                        (path           . ((type . "string")
+                                          (description . "Root directory or file to search")))
+                        (glob           . ((type . "string")
+                                          (description . "Filename glob filter, e.g. '*.py' (optional)")))
+                        (before_context . ((type . "integer")
+                                          (description . "Lines of context before each match (like grep -B)")))
+                        (after_context  . ((type . "integer")
+                                          (description . "Lines of context after each match (like grep -A)")))))
                     (required . ["pattern"]))))
 
     ((name . "create_directory")
@@ -228,17 +235,31 @@ expanded against the context directory."
        "\n"))))
 
 (defun copilot-agent-tools--find-in-files (args)
-  (let* ((pattern (cdr (assq 'pattern args)))
+  (let* ((pattern  (cdr (assq 'pattern args)))
          (raw-path (cdr (assq 'path args)))
-         (glob    (cdr (assq 'glob args)))
-         (path    (if (and raw-path (not (string-empty-p raw-path)))
-                      (copilot-agent-tools--resolve raw-path)
-                    (copilot-agent-tools--ctx-dir)))
-         (default-directory path)
-         (glob-flag (if (and glob (not (string-empty-p glob)))
-                        (format "--include='%s' " glob)
+         (glob     (cdr (assq 'glob args)))
+         ;; Coerce context args to integers; JSON may deliver them as floats or strings.
+         (before   (let ((v (cdr (assq 'before_context args))))
+                     (and v (not (eq v :null)) (truncate (if (stringp v) (string-to-number v) v)))))
+         (after    (let ((v (cdr (assq 'after_context args))))
+                     (and v (not (eq v :null)) (truncate (if (stringp v) (string-to-number v) v)))))
+         (resolved (if (and raw-path (not (string-empty-p raw-path)))
+                       (copilot-agent-tools--resolve raw-path)
+                     (copilot-agent-tools--ctx-dir)))
+         ;; path may be a file — grep the file directly; if a dir, search recursively.
+         (file-p          (and (file-regular-p resolved) (not (file-directory-p resolved))))
+         (default-directory (if file-p (file-name-directory resolved) resolved))
+         (target          (if file-p (shell-quote-argument (file-name-nondirectory resolved)) "."))
+         (glob-flag (if (and glob (not (string-empty-p glob)) (not file-p))
+                        (format "--include=%s " (shell-quote-argument glob))
                       ""))
-         (cmd (format "grep -rn -E %s'%s' ." glob-flag pattern)))
+         (ctx-flags (concat (if (and before (> before 0)) (format "-B %d " before) "")
+                            (if (and after  (> after  0)) (format "-A %d " after)  "")))
+         ;; Use -e <pattern> -- <target> so patterns or filenames starting with
+         ;; '-' are never parsed as options (quoting alone does not prevent this).
+         (cmd (format "grep -rn -E %s%s-e %s -- %s"
+                      glob-flag ctx-flags
+                      (shell-quote-argument pattern) target)))
     (with-temp-buffer
       (process-file shell-file-name nil t nil shell-command-switch cmd)
       (let* ((out   (buffer-string))
