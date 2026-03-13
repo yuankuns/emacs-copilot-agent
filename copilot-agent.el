@@ -75,8 +75,12 @@ shell commands that may have side effects.
 
 When the user asks you to make a change, follow this priority order.
 At each scope level, use find_in_files with before_context/after_context
-(e.g. before_context=5, after_context=10) so you can see enough surrounding
+(e.g. before_context=2, after_context=5) so you can see enough surrounding
 code to understand the structure without reading the whole file.
+Note: find_in_files output is capped at 200 lines.  Keep context values
+small (1-5 lines); if the output is truncated, retry with a narrower path,
+a more specific pattern, or smaller context — then read the full file only
+if still needed.
 
 0. Explicitly named file — if the user's message mentions a specific file
    by name or path, read that file first and focus the change there.

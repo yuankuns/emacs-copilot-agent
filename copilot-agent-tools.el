@@ -56,8 +56,9 @@ if needed. Works on remote files via TRAMP.")
     ((name . "find_in_files")
      (description . "Search for a regex pattern inside files (like grep -rn). \
 Returns matches with optional surrounding context lines. \
-Use before_context/after_context to see code around each match \
-without reading the whole file.")
+Output is capped at 200 lines; context flags increase truncation risk, \
+so keep before_context/after_context small (1-3 lines). \
+If output is truncated, retry with a narrower path or smaller context.")
      (parameters . ((type . "object")
                     (properties
                      . ((pattern        . ((type . "string")
