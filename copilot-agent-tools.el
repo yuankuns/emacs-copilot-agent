@@ -254,8 +254,9 @@ expanded against the context directory."
                       ""))
          (ctx-flags (concat (if (and before (> before 0)) (format "-B %d " before) "")
                             (if (and after  (> after  0)) (format "-A %d " after)  "")))
-         ;; Use shell-quote-argument for the pattern to prevent shell injection.
-         (cmd (format "grep -rn -E %s%s%s %s"
+         ;; Use -e <pattern> -- <target> so patterns or filenames starting with
+         ;; '-' are never parsed as options (quoting alone does not prevent this).
+         (cmd (format "grep -rn -E %s%s-e %s -- %s"
                       glob-flag ctx-flags
                       (shell-quote-argument pattern) target)))
     (with-temp-buffer

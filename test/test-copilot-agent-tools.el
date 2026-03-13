@@ -328,6 +328,34 @@ batch mode vs an interactive Emacs session."
       (should (string-match-p "match.py" result))
       (should-not (string-match-p "nomatch.txt" result)))))
 
+(ert-deftest tools/find-in-files-file-path ()
+  "find_in_files accepts a file path and searches only that file."
+  (with-temp-dir
+    (write-region "needle\nother\n" nil (expand-file-name "a.txt"))
+    (write-region "needle\n"        nil (expand-file-name "b.txt"))
+    (let* ((file-path (expand-file-name "a.txt"))
+           (copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--find-in-files
+                    `((pattern . "needle") (path . ,file-path)))))
+      ;; Should match in a.txt
+      (should (string-match-p "needle" result))
+      ;; Should NOT show b.txt — only the specified file was searched
+      (should-not (string-match-p "b\\.txt" result)))))
+
+(ert-deftest tools/find-in-files-context-lines ()
+  "find_in_files includes surrounding lines when context args are given."
+  (with-temp-dir
+    (write-region "before\ntarget\nafter\n" nil (expand-file-name "c.txt"))
+    (let* ((copilot-agent-tools--context (list :directory default-directory))
+           (result (copilot-agent-tools--find-in-files
+                    `((pattern        . "target")
+                      (path           . ,default-directory)
+                      (before_context . 1)
+                      (after_context  . 1)))))
+      (should (string-match-p "before" result))
+      (should (string-match-p "target" result))
+      (should (string-match-p "after"  result)))))
+
 ;;; ---------- create_directory ----------
 
 (ert-deftest tools/create-dir-creates-path ()
