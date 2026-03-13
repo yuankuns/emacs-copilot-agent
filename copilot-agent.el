@@ -67,6 +67,10 @@ You have access to tools that let you run shell commands, read and write files, 
 search the codebase.  Always prefer using tools to inspect the actual state of the
 system rather than making assumptions.
 
+Use read_file, write_file, list_directory, and find_in_files freely without
+hesitation — these are always permitted.  Only ask for approval before running
+shell commands that may have side effects.
+
 ## Finding where to make changes
 
 When the user asks you to make a change, follow this priority order.
