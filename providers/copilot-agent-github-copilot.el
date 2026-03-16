@@ -357,26 +357,38 @@ Returns plist with :text :tool-calls :stop-reason :raw-content or :error."
             (list :error (format "%s: %s"
                                  (or (cdr (assq 'code    err-obj)) "error")
                                  (cdr (assq 'message err-obj))))))
+        ;; The GitHub Copilot API sometimes spreads the response across multiple
+        ;; choice elements: choices[0] carries the assistant text and choices[1]
+        ;; (or another element) carries the tool_calls array.  Iterate ALL
+        ;; choices so neither piece is silently dropped.
         (let* ((choices (cdr (assq 'choices data)))
-               (choice  (and (vectorp choices) (> (length choices) 0) (aref choices 0)))
-               (msg     (and choice (cdr (assq 'message       choice))))
-               (finish  (and choice (cdr (assq 'finish_reason choice))))
-               (content (and msg (cdr (assq 'content    msg))))
-               (tc-raw  (and msg (cdr (assq 'tool_calls msg))))
-               tool-calls)
-          (unless choice
+               tool-calls content finish)
+          (unless (and (vectorp choices) (> (length choices) 0))
             (cl-return-from copilot-agent-github-copilot--parse-response
               (list :error "GitHub Copilot response contained no choices")))
-          (when (and tc-raw (vectorp tc-raw))
-            (seq-doseq (tc tc-raw)
-              (let* ((id       (cdr (assq 'id tc)))
-                     (fn       (cdr (assq 'function tc)))
-                     (name     (cdr (assq 'name fn)))
-                     (args-str (cdr (assq 'arguments fn)))
-                     (args     (condition-case _
-                                   (json-read-from-string (or args-str "{}"))
-                                 (error nil))))
-                (push (list :id id :name name :input args) tool-calls))))
+          (seq-doseq (choice choices)
+            (let* ((msg         (cdr (assq 'message       choice)))
+                   (fin         (cdr (assq 'finish_reason choice)))
+                   (msg-content (and msg (cdr (assq 'content    msg))))
+                   (tc-raw      (and msg (cdr (assq 'tool_calls msg)))))
+              ;; Prefer finish_reason from the choice that carries tool_calls
+              (when fin (setq finish fin))
+              ;; Accumulate non-empty text
+              (when (and msg-content
+                         (not (eq   msg-content :null))
+                         (not (equal msg-content "")))
+                (setq content msg-content))
+              ;; Accumulate tool calls from whichever choice carries them
+              (when (and tc-raw (vectorp tc-raw))
+                (seq-doseq (tc tc-raw)
+                  (let* ((id       (cdr (assq 'id tc)))
+                         (fn       (cdr (assq 'function tc)))
+                         (name     (cdr (assq 'name fn)))
+                         (args-str (cdr (assq 'arguments fn)))
+                         (args     (condition-case _
+                                       (json-read-from-string (or args-str "{}"))
+                                     (error nil))))
+                    (push (list :id id :name name :input args) tool-calls))))))
           (let* ((ordered (nreverse tool-calls))
                  (raw-content
                   (if ordered
@@ -392,7 +404,7 @@ Returns plist with :text :tool-calls :stop-reason :raw-content or :error."
                                                                 (plist-get tc :input)))))))
                                          ordered))))
                     (or content ""))))
-            (list :text        (unless (equal content :null) content)
+            (list :text        content
                   :tool-calls  ordered
                   :stop-reason finish
                   :raw-content raw-content))))
