@@ -1,8 +1,8 @@
-;;; copilot-agent.el --- AI coding agent for Emacs -*- lexical-binding: t -*-
+;;; copilot-agent.el --- AI coding assistant powered by LLMs -*- lexical-binding: t -*-
 
 ;; Author: yuankuns <yuankuns@users.noreply.github.com>
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: ai llm agent tools copilot
 ;; URL: https://github.com/yuankuns/emacs-copilot-agent
 

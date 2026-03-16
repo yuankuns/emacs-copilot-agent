@@ -1,0 +1,4 @@
+(copilot-agent
+ :repo "yuankuns/emacs-copilot-agent"
+ :fetcher github
+ :files ("*.el" "providers/*.el"))
