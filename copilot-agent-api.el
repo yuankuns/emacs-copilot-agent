@@ -15,6 +15,24 @@
 (require 'json)
 (require 'copilot-agent-tools)
 
+;;; ---------- Debug Logging ----------
+
+(defcustom copilot-agent-debug nil
+  "When non-nil, log raw HTTP request/response bodies and tool call details.
+Output goes to the *copilot-agent-debug* buffer.  Useful for diagnosing
+tool-call parsing or provider communication issues."
+  :type 'boolean
+  :group 'copilot-agent)
+
+(defun copilot-agent-api--debug (fmt &rest args)
+  "Log FMT+ARGS to *copilot-agent-debug* when `copilot-agent-debug' is non-nil."
+  (when copilot-agent-debug
+    (with-current-buffer (get-buffer-create "*copilot-agent-debug*")
+      (goto-char (point-max))
+      (insert (format-time-string "[%H:%M:%S] "))
+      (insert (apply #'format fmt args))
+      (insert "\n"))))
+
 ;; Add providers/ to load-path so (require 'copilot-agent-*) works after
 ;; package-vc-install (which only adds the package root).  Placed here rather
 ;; than in copilot-agent.el so every entry point that loads this core file
@@ -139,6 +157,7 @@ CALLBACK is called as (BODY-STRING NIL) on success or
                                 (string-trim
                                  (substring raw (+ idx (length copilot-agent-api--status-sentinel)))))
                              0)))
+               (copilot-agent-api--debug "HTTP %d  body: %.500s" code body)
                (if (and (>= code 200) (< code 300))
                    (funcall callback body nil)
                  (funcall callback nil
@@ -246,12 +265,20 @@ CALLBACKS plist keys (all optional):
          (on-done    (plist-get callbacks :on-done)))
     ;; Show text to user
     (when (and text on-text) (funcall on-text text))
+    (copilot-agent-api--debug "handle-response: text=%S tool-calls=%S"
+                              (and text (substring text 0 (min 120 (length text))))
+                              (mapcar (lambda (tc) (plist-get tc :name)) tool-calls))
     ;; Record this assistant turn in history
     (copilot-agent-api--append-message
      session `((role . "assistant") (content . ,raw)))
     (if (null tool-calls)
         (when on-done (funcall on-done))
-      (copilot-agent-api--process-tools tool-calls session callbacks))))
+      (condition-case err
+          (copilot-agent-api--process-tools tool-calls session callbacks)
+        (error
+         (copilot-agent-api--debug "process-tools error: %s" (error-message-string err))
+         (when (plist-get callbacks :on-error)
+           (funcall (plist-get callbacks :on-error) (error-message-string err))))))))
 
 (defun copilot-agent-api--process-tools (tool-calls session callbacks)
   "Execute approved TOOL-CALLS, append results, then continue the loop."
@@ -265,12 +292,14 @@ CALLBACKS plist keys (all optional):
       (let* ((name  (plist-get tc :name))
              (input (plist-get tc :input))
              (id    (plist-get tc :id)))
+        (copilot-agent-api--debug "tool-call: name=%s id=%s input=%S" name id input)
         (when on-tool-call (funcall on-tool-call name input))
         (let* ((approved (copilot-agent-api--approve-tool name input session on-approve))
                (result   (if approved
                              (copilot-agent-tools-execute
                               name (copilot-agent-api--to-alist input))
                            "Tool execution declined by user.")))
+          (copilot-agent-api--debug "tool-result: name=%s result=%.200s" name result)
           (when on-tool-result (funcall on-tool-result name result))
           (push (list :tool-use-id id :content result) results))))
     ;; make-tool-result-fn may return either a single message alist (Anthropic,
