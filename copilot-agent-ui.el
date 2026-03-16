@@ -279,19 +279,21 @@ buffer that is not the agent chat buffer itself, then updates:
     (when (and src (not (eq src (plist-get session :context-buffer))))
       (plist-put session :context-buffer src)
       (copilot-agent-tools-set-context src)
-      ;; Update the "Current file:" line in the system prompt so the LLM
-      ;; generates paths for the new file rather than the original one.
-      ;; Only acts when the prompt already contains the marker (i.e. when
-      ;; copilot-agent-auto-context was t at session-creation time).
+      ;; Update (or add) the "Current file:" line in the system prompt so
+      ;; the LLM generates paths for the correct file.  Replaces the marker
+      ;; when already present; appends it when the session was opened from a
+      ;; non-file buffer and the marker was never written.
       (let ((prompt (plist-get session :system-prompt))
             (file   (or (file-remote-p (buffer-file-name src) 'localname)
                         (buffer-file-name src))))
-        (when (and prompt file (string-match-p "Current file:" prompt))
+        (when (and prompt file)
           (plist-put session :system-prompt
-                     (replace-regexp-in-string
-                      "Current file:.*"
-                      (concat "Current file: " file)
-                      prompt)))))))
+                     (if (string-match-p "Current file:" prompt)
+                         (replace-regexp-in-string
+                          "Current file:.*"
+                          (concat "Current file: " file)
+                          prompt)
+                       (concat prompt "\n\nCurrent file: " file))))))))
 
 (defun copilot-agent-ui-send ()
   "Send the current input to the active agent session."

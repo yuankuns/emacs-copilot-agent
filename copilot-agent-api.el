@@ -120,6 +120,7 @@ CALLBACK is called as (BODY-STRING NIL) on success or
      :buffer  resp-buf
      :command (append
                (list "curl" "--silent" "--show-error"
+                     "--max-time" "120"
                      "-w" (concat copilot-agent-api--status-sentinel "%{http_code}")
                      "-X" "POST"
                      "-H" "Content-Type: application/json")
@@ -224,15 +225,17 @@ CALLBACKS plist keys (all optional):
          (on-think (plist-get callbacks :on-thinking))
          (on-error (plist-get callbacks :on-error)))
     (when on-think (funcall on-think))
-    (funcall send-fn session
-             (lambda (response http-error)
-               (if http-error
-                   (progn
-                     (when (fboundp 'copilot-agent-status-record-error)
-                       (copilot-agent-status-record-error
-                        (plist-get session :provider) http-error))
-                     (when on-error (funcall on-error http-error)))
-                 (copilot-agent-api--handle-response response session callbacks))))))
+    (condition-case err
+        (funcall send-fn session
+                 (lambda (response http-error)
+                   (if http-error
+                       (progn
+                         (when (fboundp 'copilot-agent-status-record-error)
+                           (copilot-agent-status-record-error
+                            (plist-get session :provider) http-error))
+                         (when on-error (funcall on-error http-error)))
+                     (copilot-agent-api--handle-response response session callbacks))))
+      (error (when on-error (funcall on-error (error-message-string err)))))))
 
 (defun copilot-agent-api--handle-response (response session callbacks)
   "Process parsed RESPONSE plist from a provider and continue the loop."
