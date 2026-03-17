@@ -1,5 +1,7 @@
 ;;; copilot-agent-api.el --- Provider registry, HTTP, and agentic loop -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "copilot-agent.el"
+
 ;;; Commentary:
 ;; Provider-agnostic core layer.  Responsibilities:
 ;;   - Provider registry (Anthropic, Gemini, …)
@@ -129,7 +131,7 @@ appear in any API response body.")
 (defun copilot-agent-api--curl-post (url headers json-body callback)
   "POST JSON-BODY string to URL with HEADERS list asynchronously via curl.
 CALLBACK is called as (BODY-STRING NIL) on success or
-(NIL ERROR-STRING) on failure."
+\(NIL ERROR-STRING) on failure."
   (let* ((req-file (make-temp-file "copilot-agent-req" nil ".json"))
          (resp-buf (generate-new-buffer " *copilot-agent-http*")))
     (write-region json-body nil req-file nil 'silent)
@@ -169,7 +171,7 @@ CALLBACK is called as (BODY-STRING NIL) on success or
 
 (defun copilot-agent-api--to-alist (obj)
   "Normalise OBJ to an alist for use as tool arguments.
-Handles: hash-table (from json-parse-string), alist, plist, nil."
+Handles: hash-table (from `json-parse-string'), alist, plist, nil."
   (cond
    ((null obj) nil)
    ((hash-table-p obj)
@@ -238,7 +240,8 @@ CALLBACKS plist keys (all optional):
   (copilot-agent-api--loop session callbacks))
 
 (defun copilot-agent-api--loop (session callbacks)
-  "Internal: send current session messages, then handle the response."
+  "Send current SESSION messages via its provider, then handle the response.
+CALLBACKS is the plist passed through from `copilot-agent-api-send'."
   (let* ((provider (copilot-agent-api--get-provider (plist-get session :provider)))
          (send-fn  (plist-get provider :send-fn))
          (on-think (plist-get callbacks :on-thinking))
@@ -257,7 +260,8 @@ CALLBACKS plist keys (all optional):
       (error (when on-error (funcall on-error (error-message-string err)))))))
 
 (defun copilot-agent-api--handle-response (response session callbacks)
-  "Process parsed RESPONSE plist from a provider and continue the loop."
+  "Process parsed RESPONSE plist from a provider for SESSION and continue the loop.
+CALLBACKS is the plist passed through from `copilot-agent-api-send'."
   (let* ((text       (plist-get response :text))
          (tool-calls (plist-get response :tool-calls))
          (raw        (plist-get response :raw-content))
@@ -281,7 +285,8 @@ CALLBACKS plist keys (all optional):
            (funcall (plist-get callbacks :on-error) (error-message-string err))))))))
 
 (defun copilot-agent-api--process-tools (tool-calls session callbacks)
-  "Execute approved TOOL-CALLS, append results, then continue the loop."
+  "Execute approved TOOL-CALLS for SESSION, append results, then continue the loop.
+CALLBACKS is the plist passed through from `copilot-agent-api-send'."
   (let* ((provider       (copilot-agent-api--get-provider (plist-get session :provider)))
          (make-result-fn (plist-get provider :make-tool-result-fn))
          (on-tool-call   (plist-get callbacks :on-tool-call))

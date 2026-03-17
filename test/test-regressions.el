@@ -9,9 +9,13 @@
 (require 'ert)
 (require 'cl-lib)
 
-(let ((root (expand-file-name ".." (file-name-directory (or load-file-name buffer-file-name)))))
-  (dolist (d (list root (expand-file-name "providers" root)))
-    (unless (member d load-path) (push d load-path))))
+(defconst test-regressions--root
+  (expand-file-name ".." (file-name-directory (or load-file-name buffer-file-name)))
+  "Root directory of the project under test.")
+
+(dolist (d (list test-regressions--root
+                 (expand-file-name "providers" test-regressions--root)))
+  (unless (member d load-path) (push d load-path)))
 
 (require 'auth-source)
 (advice-add 'auth-source-pick-first-password :override (lambda (&rest _) "stub-key")
@@ -548,8 +552,7 @@ so thoughtSignature on functionCall parts is not lost."
   "No source file may use `t' as a lambda parameter name.
 In lexical-binding mode this is a fatal byte-compile error that prevents
 .elc generation by package-vc-install, leaving functions undefined."
-  (let* ((root (expand-file-name
-                ".." (file-name-directory (or load-file-name buffer-file-name))))
+  (let* ((root test-regressions--root)
          (source-files
           (append
            (directory-files root t "\\.el\\'")
@@ -569,8 +572,7 @@ In lexical-binding mode this is a fatal byte-compile error that prevents
 Uses byte-compile-file with byte-compile-dest-file-function redirected
 to a temporary file so no .elc artifacts are left in the source tree.
 Catches issues like invalid lambda variable names, unbalanced parens, etc."
-  (let* ((root (expand-file-name
-                ".." (file-name-directory (or load-file-name buffer-file-name))))
+  (let* ((root test-regressions--root)
          (files `(,(expand-file-name "copilot-agent-tools.el"  root)
                   ,(expand-file-name "copilot-agent-api.el"    root)
                   ,(expand-file-name "copilot-agent-ui.el"     root)
@@ -621,8 +623,7 @@ the package root (no providers/) then force-loads copilot-agent-api via
 `load' (bypassing require's no-op for already-provided features) and
 verifies the eval-and-compile block adds providers/ to the local load-path.
 Removing or breaking the load-path setup causes this test to fail."
-  (let* ((root     (expand-file-name
-                    ".." (file-name-directory (or load-file-name buffer-file-name))))
+  (let* ((root     test-regressions--root)
          (prov-dir (directory-file-name (expand-file-name "providers" root)))
          ;; Start from a load-path that does NOT include providers/.
          (load-path (list root)))

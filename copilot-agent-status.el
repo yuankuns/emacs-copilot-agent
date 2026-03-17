@@ -1,5 +1,7 @@
 ;;; copilot-agent-status.el --- Model status display -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "copilot-agent.el"
+
 ;;; Commentary:
 ;; M-x copilot-agent-status  — show current provider, model, context window,
 ;; token expiry, and last quota message in a read-only buffer.

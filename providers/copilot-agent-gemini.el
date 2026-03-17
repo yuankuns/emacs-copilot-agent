@@ -1,5 +1,7 @@
 ;;; copilot-agent-gemini.el --- Google Gemini provider -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "../copilot-agent.el"
+
 ;;; Commentary:
 ;; Implements the copilot-agent provider protocol for Google Gemini.
 ;;
@@ -28,7 +30,7 @@
 (require 'auth-source)
 (require 'json)
 (require 'url)
-(require 'copilot-agent-api nil t)
+(require 'copilot-agent-api)
 
 ;;; ---------- Configuration ----------
 
@@ -41,7 +43,7 @@
   "Authentication mode for the Gemini provider.
 `api-key' — use an API key from auth-source (existing behaviour).
 `cli'      — use OAuth via the installed Gemini CLI; run
-             M-x copilot-agent-gemini-login once to authenticate."
+             \\[copilot-agent-gemini-login] once to authenticate."
   :type '(choice (const :tag "API key (auth-source)" api-key)
                  (const :tag "Gemini CLI OAuth"       cli))
   :group 'copilot-agent)
@@ -223,7 +225,7 @@ Writes to the credentials file."
   (set-file-modes copilot-agent-gemini--cli-creds-file #o600))
 
 (defun copilot-agent-gemini--cli-load-creds ()
-  "Load credentials from the credentials file.  Returns alist or nil."
+  "Load credentials from the credentials file.  Return alist or nil."
   (when (file-exists-p copilot-agent-gemini--cli-creds-file)
     (condition-case _
         (json-read-file copilot-agent-gemini--cli-creds-file)
@@ -252,14 +254,14 @@ Saves and returns updated credentials alist."
 
 (defun copilot-agent-gemini--cli-valid-access-token ()
   "Return a valid access token string, refreshing if within 60 s of expiry.
-Signals an error if no credentials exist (run M-x copilot-agent-gemini-login)."
+Signal an error if no credentials exist (run \\[copilot-agent-gemini-login])."
   (let* ((creds   (copilot-agent-gemini--cli-load-creds))
          (access  (and creds (cdr (assq 'access_token  creds))))
          (refresh (and creds (cdr (assq 'refresh_token creds))))
          (expires (and creds (cdr (assq 'expires       creds))))
          (now-ms  (truncate (* (float-time) 1000))))
     (unless access
-      (error "No Gemini CLI credentials.  Run M-x copilot-agent-gemini-login first."))
+      (error "No Gemini CLI credentials -- run M-x copilot-agent-gemini-login first"))
     (if (and expires (> (- expires now-ms) 60000))
         access
       (unless refresh
@@ -311,7 +313,7 @@ Returns parsed JSON alist or signals an error."
     (pluginType . "GEMINI")))
 
 (defun copilot-agent-gemini--json-get-sync (url token)
-  "GET URL with Bearer TOKEN synchronously.  Returns parsed JSON alist."
+  "GET URL with Bearer TOKEN synchronously.  Return parsed JSON alist."
   (let* ((url-request-method "GET")
          (url-request-extra-headers
           `(("Authorization" . ,(concat "Bearer " token))))
@@ -415,7 +417,7 @@ Requires the Gemini CLI to be installed:
         (delete-process copilot-agent-gemini--oauth-server)
         (setq copilot-agent-gemini--oauth-server nil))
       (unless code
-        (error "Gemini login timed out.  Run M-x copilot-agent-gemini-login again."))
+        (error "Gemini login timed out -- run M-x copilot-agent-gemini-login again"))
       ;; Exchange auth code for tokens
       (let* ((result  (copilot-agent-gemini--post-form
                        copilot-agent-gemini--oauth-token-url
@@ -477,7 +479,7 @@ uppercase type names."
 ;;; ---------- Message Conversion ----------
 
 (defun copilot-agent-gemini--canonical->gemini-role (role)
-  "Convert canonical role string (\"user\"/\"assistant\") to Gemini role."
+  "Convert canonical ROLE string (\"user\"/\"assistant\") to Gemini role."
   (if (equal role "assistant") "model" role))
 
 (defun copilot-agent-gemini--canonical->parts (content)
@@ -620,7 +622,7 @@ Dispatches based on `copilot-agent-gemini-auth-mode'."
     (copilot-agent-gemini--send-api-key session callback)))
 
 (defun copilot-agent-gemini--send-api-key (session callback)
-  "Send SESSION using an API key (query-param auth)."
+  "Send SESSION using an API key (query-param auth), calling CALLBACK when done."
   (let* ((api-key (condition-case e
                       (copilot-agent-gemini--api-key)
                     (error (funcall callback nil (error-message-string e)) nil)))
@@ -638,7 +640,7 @@ Dispatches based on `copilot-agent-gemini-auth-mode'."
                (funcall callback parsed nil)))))))))
 
 (defun copilot-agent-gemini--send-cli (session callback)
-  "Send SESSION via Cloud Code Assist API using an OAuth Bearer token.
+  "Send SESSION via Cloud Code Assist API using OAuth, calling CALLBACK when done.
 The Code Assist endpoint wraps the standard Gemini request in:
   {\"model\": MODEL, \"project\": PROJECT, \"request\": {GEMINI-BODY}}
 and returns the Gemini response nested under a \"response\" key."
@@ -711,17 +713,16 @@ TOOL-RESULTS is a list of plists: (:tool-use-id ID :content RESULT-STRING)."
 
 ;;; ---------- Provider Registration ----------
 
-(with-eval-after-load 'copilot-agent-api
-  (copilot-agent-api-register-provider
-   'gemini
-   (list :display-name          "Google Gemini"
-         :default-model         copilot-agent-gemini-default-model
-         :default-model-fn      (lambda () copilot-agent-gemini-default-model)
-         :send-fn               #'copilot-agent-gemini-send
-         :make-tool-result-fn   #'copilot-agent-gemini-make-tool-result-message
-         :format-tools-fn       #'copilot-agent-gemini--format-tools
-         :list-models-fn        #'copilot-agent-gemini--list-models
-         :set-model-fn          #'copilot-agent-gemini--set-model)))
+(copilot-agent-api-register-provider
+ 'gemini
+ (list :display-name          "Google Gemini"
+       :default-model         copilot-agent-gemini-default-model
+       :default-model-fn      (lambda () copilot-agent-gemini-default-model)
+       :send-fn               #'copilot-agent-gemini-send
+       :make-tool-result-fn   #'copilot-agent-gemini-make-tool-result-message
+       :format-tools-fn       #'copilot-agent-gemini--format-tools
+       :list-models-fn        #'copilot-agent-gemini--list-models
+       :set-model-fn          #'copilot-agent-gemini--set-model))
 
 (provide 'copilot-agent-gemini)
 ;;; copilot-agent-gemini.el ends here

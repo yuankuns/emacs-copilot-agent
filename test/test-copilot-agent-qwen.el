@@ -8,6 +8,13 @@
 ;;; Code:
 
 (require 'ert)
+
+(let* ((this-dir (file-name-directory (or load-file-name buffer-file-name)))
+       (root     (expand-file-name ".." this-dir)))
+  (dolist (d (list root (expand-file-name "providers" root)))
+    (unless (member d load-path) (push d load-path))))
+
+(require 'copilot-agent-api)
 (require 'copilot-agent-qwen)
 
 ;;; ---------- PKCE ----------
