@@ -125,9 +125,12 @@ Has insertion-type nil so it stays put while history grows.")
       ;; Separator + prompt (read-only, permanently at the bottom)
       (insert (propertize (concat (make-string 60 ?─) "\n")
                           'face 'copilot-agent-separator-face 'read-only t))
-      ;; The prompt itself must NOT carry read-only: Emacs blocks insertions
-      ;; immediately after a read-only character, which would prevent typing.
-      (insert (propertize "> " 'face 'copilot-agent-prompt-face))
+      ;; The prompt is read-only so it cannot be deleted, but rear-nonsticky
+      ;; ensures that text typed immediately after it does NOT inherit
+      ;; read-only — so the user can still type in the input area.
+      (insert (propertize "> " 'face 'copilot-agent-prompt-face
+                              'read-only t
+                              'rear-nonsticky '(read-only face)))
       ;; input-marker: stays at the start of the user input area
       (setq copilot-agent-ui--input-marker (point-marker))
       (set-marker-insertion-type copilot-agent-ui--input-marker nil)
