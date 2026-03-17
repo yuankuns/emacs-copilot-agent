@@ -340,9 +340,9 @@ or if OLD_STRING matches more than once (ambiguous edit)."
                       n)))
       (cond
        ((= count 0)
-        (error "Edit_file: old_string not found in %s" path))
+        (error "edit_file: old_string not found in %s" path))
        ((> count 1)
-        (error "Edit_file: old_string matches %d times in %s — add more context to make it unique"
+        (error "edit_file: old_string matches %d times in %s — add more context to make it unique"
                count path)))
       ;; Exactly one match — replace it.
       (let ((new-content (concat
