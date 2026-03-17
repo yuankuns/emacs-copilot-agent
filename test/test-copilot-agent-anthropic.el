@@ -62,6 +62,15 @@
 \"message\":\"Invalid API key\"}}"
   "Fixture: an API error response.")
 
+(defconst anthropic-test--thinking-response
+  "{\"id\":\"msg_04\",\"type\":\"message\",\"role\":\"assistant\",\
+\"model\":\"claude-sonnet-4-6\",\"stop_reason\":\"end_turn\",\
+\"content\":[\
+  {\"type\":\"thinking\",\"thinking\":\"Let me reason through this carefully.\"},\
+  {\"type\":\"text\",\"text\":\"The answer is 42.\"}\
+]}"
+  "Fixture: a response with an extended-thinking block followed by a text block.")
+
 ;;; ---------- Tool Schema Formatting ----------
 
 (ert-deftest anthropic/format-tools-renames-parameters ()
@@ -204,6 +213,26 @@
   "parse-response returns :error for malformed JSON."
   (let ((result (copilot-agent-anthropic--parse-response "not json{")))
     (should (plist-get result :error))))
+
+(ert-deftest anthropic/parse-thinking-response-extracts-text-only ()
+  "parse-response skips thinking blocks and returns only the visible text."
+  (let ((result (copilot-agent-anthropic--parse-response
+                 anthropic-test--thinking-response)))
+    (should (equal (plist-get result :text) "The answer is 42."))
+    (should (null (plist-get result :tool-calls)))
+    (should-not (plist-get result :error))))
+
+(ert-deftest anthropic/parse-thinking-response-logs-thought ()
+  "parse-response emits a debug log entry for the thinking block."
+  (let ((copilot-agent-debug t)
+        logged)
+    (cl-letf (((symbol-function 'copilot-agent-api--debug)
+               (lambda (fmt &rest args)
+                 (when (string-match-p "thinking" fmt)
+                   (setq logged (apply #'format fmt args))))))
+      (copilot-agent-anthropic--parse-response anthropic-test--thinking-response))
+    (should logged)
+    (should (string-match-p "Let me reason" logged))))
 
 ;;; ---------- Tool Result Message ----------
 

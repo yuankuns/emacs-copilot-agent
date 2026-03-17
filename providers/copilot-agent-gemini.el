@@ -587,7 +587,8 @@ Returns plist with :text :tool-calls :stop-reason :raw-content :error."
           ;; the user as assistant text.
           (seq-doseq (part (if (vectorp parts) parts (vconcat parts)))
             (cond
-             ((cdr (assq 'thought part)) nil)   ; thinking part — skip display
+             ((cdr (assq 'thought part))        ; thinking part — log but skip display
+              (copilot-agent-api--debug "thinking: %.500s" (cdr (assq 'text part))))
              ((assq 'text part)
               (setq text (concat (or text "") (cdr (assq 'text part)))))
              ((assq 'functionCall part)

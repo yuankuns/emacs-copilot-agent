@@ -57,6 +57,13 @@
   "{\"promptFeedback\":{\"blockReason\":\"SAFETY\"}}"
   "Fixture: a response with no candidates (blocked by safety filter).")
 
+(defconst gemini-test--thinking-response
+  "{\"candidates\":[{\"content\":{\"parts\":[\
+{\"thought\":true,\"text\":\"Let me think about this step by step.\"},\
+{\"text\":\"The answer is 42.\"}\
+],\"role\":\"model\"},\"finishReason\":\"STOP\"}]}"
+  "Fixture: a thinking-model response with a thought part and a text part.")
+
 ;;; ---------- Type Upscaling ----------
 
 (ert-deftest gemini/upcase-types-string ()
@@ -277,6 +284,26 @@
   "parse-response returns :error for malformed JSON."
   (let ((result (copilot-agent-gemini--parse-response "{bad json")))
     (should (plist-get result :error))))
+
+(ert-deftest gemini/parse-thinking-response-extracts-text-only ()
+  "parse-response skips thought parts and returns only the visible text."
+  (let ((result (copilot-agent-gemini--parse-response
+                 gemini-test--thinking-response)))
+    (should (equal (plist-get result :text) "The answer is 42."))
+    (should (null (plist-get result :tool-calls)))
+    (should-not (plist-get result :error))))
+
+(ert-deftest gemini/parse-thinking-response-logs-thought ()
+  "parse-response emits a debug log entry for the thought part."
+  (let ((copilot-agent-debug t)
+        logged)
+    (cl-letf (((symbol-function 'copilot-agent-api--debug)
+               (lambda (fmt &rest args)
+                 (when (string-match-p "thinking" fmt)
+                   (setq logged (apply #'format fmt args))))))
+      (copilot-agent-gemini--parse-response gemini-test--thinking-response))
+    (should logged)
+    (should (string-match-p "Let me think" logged))))
 
 ;;; ---------- Tool Result Message ----------
 

@@ -106,6 +106,8 @@ Returns plist with :text, :tool-calls, :stop-reason, :error."
         (seq-doseq (block (if (vectorp content) content (vconcat content)))
           (let ((btype (cdr (assq 'type block))))
             (cond
+             ((equal btype "thinking")
+              (copilot-agent-api--debug "thinking: %.500s" (cdr (assq 'thinking block))))
              ((equal btype "text")
               (setq text (concat (or text "") (cdr (assq 'text block)))))
              ((equal btype "tool_use")
