@@ -287,6 +287,40 @@ right after the two '> ' characters."
     (copilot-agent-ui--clear-input)
     (should (string-search "> " (buffer-string)))))
 
+(ert-deftest ui/prompt-is-read-only ()
+  "The '> ' prompt characters must carry the read-only text property.
+Regression: prompt was deletable, leaving the user unable to type."
+  (with-fresh-chat-buffer
+    (let* ((pos (marker-position copilot-agent-ui--input-marker))
+           ;; The prompt is the two characters just before input-marker
+           (prop-gt    (get-text-property (- pos 2) 'read-only))
+           (prop-space (get-text-property (- pos 1) 'read-only)))
+      (should (equal (buffer-substring-no-properties (- pos 2) pos) "> "))
+      (should prop-gt)
+      (should prop-space))))
+
+(ert-deftest ui/prompt-deletion-signals-error ()
+  "Attempting to delete the '> ' prompt must signal text-read-only.
+Regression: prompt was silently deletable, breaking further input."
+  (with-fresh-chat-buffer
+    (let ((pos (marker-position copilot-agent-ui--input-marker)))
+      (should-error
+       (delete-region (- pos 2) pos)
+       :type 'text-read-only))))
+
+(ert-deftest ui/typing-after-prompt-is-allowed ()
+  "Inserting text at point-max is allowed even though '> ' is now read-only.
+Regression guard: rear-nonsticky must prevent read-only from sticky-propagating
+to newly typed characters."
+  (with-fresh-chat-buffer
+    (goto-char (point-max))
+    (should (progn (insert "test input") t))
+    (should (equal (copilot-agent-ui--get-input) "test input"))
+    ;; Verify inserted characters did not inherit the read-only property
+    (let* ((end (point-max))
+           (start (- end (length "test input"))))
+      (should-not (text-property-any start end 'read-only t)))))
+
 ;;; ---------- Thinking indicator ----------
 
 (ert-deftest ui/show-thinking-creates-overlay ()
