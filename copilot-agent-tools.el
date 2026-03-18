@@ -1,5 +1,7 @@
 ;;; copilot-agent-tools.el --- Tool definitions and TRAMP-aware execution -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "copilot-agent.el"
+
 ;;; Commentary:
 ;; Defines the tool schema (sent to LLMs) and their implementations.
 ;; All tools are TRAMP-aware: when the active context directory is a remote
@@ -180,7 +182,7 @@ expanded against the context directory."
 ;;; ---------- Dispatcher ----------
 
 (defun copilot-agent-tools-execute (name args)
-  "Run tool NAME with ARGS (alist decoded from JSON). Returns a result string."
+  "Run tool NAME with ARGS (alist decoded from JSON).  Return a result string."
   (condition-case err
       (pcase name
         ("shell_command"    (copilot-agent-tools--shell args))
@@ -199,6 +201,7 @@ expanded against the context directory."
 ;;; ---------- Tool Implementations ----------
 
 (defun copilot-agent-tools--shell (args)
+  "Execute a shell command described by ARGS and return its output."
   (let* ((command (cdr (assq 'command args)))
          (raw-cwd (cdr (assq 'cwd args)))
          (cwd (if (and raw-cwd (not (string-empty-p raw-cwd)))
@@ -219,6 +222,7 @@ expanded against the context directory."
                   (format "\n[exit code: %d]" exit-code)))))))
 
 (defun copilot-agent-tools--read-file (args)
+  "Read and return the contents of the file described by ARGS."
   (let ((path (copilot-agent-tools--resolve (cdr (assq 'path args)))))
     (unless (file-exists-p path)
       (error "File not found: %s" path))
@@ -227,6 +231,7 @@ expanded against the context directory."
       (buffer-string))))
 
 (defun copilot-agent-tools--write-file (args)
+  "Write content to the file described by ARGS, creating it if needed."
   (let* ((path    (copilot-agent-tools--resolve (cdr (assq 'path args))))
          (content (cdr (assq 'content args))))
     (make-directory (file-name-directory path) t)
@@ -251,6 +256,7 @@ expanded against the context directory."
     (format "Wrote %d bytes to %s" (length content) path)))
 
 (defun copilot-agent-tools--list-dir (args)
+  "List directory contents described by ARGS and return a formatted string."
   (let* ((raw  (cdr (assq 'path args)))
          (path (if (and raw (not (string-empty-p raw)))
                    (copilot-agent-tools--resolve raw)
@@ -276,6 +282,7 @@ expanded against the context directory."
        "\n"))))
 
 (defun copilot-agent-tools--find-in-files (args)
+  "Search for a regex pattern in files described by ARGS using grep."
   (let* ((pattern (cdr (assq 'pattern args)))
          (raw-path (cdr (assq 'path args)))
          (glob    (cdr (assq 'glob args)))
@@ -301,11 +308,13 @@ expanded against the context directory."
             (mapconcat #'identity capped "\n")))))))
 
 (defun copilot-agent-tools--create-dir (args)
+  "Create the directory described by ARGS, including any missing parents."
   (let ((path (copilot-agent-tools--resolve (cdr (assq 'path args)))))
     (make-directory path t)
     (format "Created: %s" path)))
 
 (defun copilot-agent-tools--delete-file (args)
+  "Delete the file described by ARGS."
   (let ((path (copilot-agent-tools--resolve (cdr (assq 'path args)))))
     (unless (file-exists-p path)
       (error "File not found: %s" path))
@@ -313,8 +322,8 @@ expanded against the context directory."
     (format "Deleted: %s" path)))
 
 (defun copilot-agent-tools--edit-file (args)
-  "Replace OLD_STRING with NEW_STRING in the file at PATH.
-Signals an error if the file does not exist, if OLD_STRING is not found,
+  "Replace OLD_STRING with NEW_STRING in the file at PATH from ARGS.
+Signal an error if the file does not exist, if OLD_STRING is not found,
 or if OLD_STRING matches more than once (ambiguous edit)."
   (let* ((path       (copilot-agent-tools--resolve (cdr (assq 'path args))))
          (old-string (cdr (assq 'old_string args)))
@@ -352,7 +361,7 @@ or if OLD_STRING matches more than once (ambiguous edit)."
               path (length old-string) (length new-string)))))
 
 (defun copilot-agent-tools--glob (args)
-  "Find files under PATH whose names match PATTERN (a shell glob like *.el).
+  "Find files matching PATTERN under PATH described by ARGS.
 Uses `find -name' so it recurses into subdirectories and is TRAMP-aware
 via `process-file'.  Returns relative paths, one per line, sorted."
   (let* ((pattern  (cdr (assq 'pattern args)))
@@ -378,7 +387,7 @@ via `process-file'.  Returns relative paths, one per line, sorted."
             (mapconcat #'identity capped "\n")))))))
 
 (defun copilot-agent-tools--grep (args)
-  "Search for PATTERN in files under PATH with optional context lines.
+  "Search files described by ARGS for PATTERN with optional context lines.
 Like `find_in_files' but supports BEFORE_CONTEXT and AFTER_CONTEXT."
   (let* ((pattern  (cdr (assq 'pattern args)))
          (raw-path (cdr (assq 'path args)))

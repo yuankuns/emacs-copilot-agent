@@ -1,5 +1,7 @@
 ;;; copilot-agent-ui.el --- Chat buffer UI -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "copilot-agent.el"
+
 ;;; Commentary:
 ;; Provides the interactive chat buffer for copilot-agent.
 ;;
@@ -157,16 +159,19 @@ Always uses the history-end-marker so the separator stays at the bottom."
 ;;; ---------- Message rendering ----------
 
 (defun copilot-agent-ui-insert-user-message (text)
+  "Insert a user message with TEXT into the history area."
   (copilot-agent-ui--history-insert
    (concat "\n" (propertize "You" 'face 'copilot-agent-user-face) "\n"))
   (copilot-agent-ui--history-insert (concat text "\n")))
 
 (defun copilot-agent-ui-insert-assistant-text (text)
+  "Insert an assistant response with TEXT into the history area."
   (copilot-agent-ui--history-insert
    (concat "\n" (propertize "Assistant" 'face 'copilot-agent-assistant-face) "\n"))
   (copilot-agent-ui--history-insert (concat text "\n")))
 
 (defun copilot-agent-ui-insert-tool-call (name input)
+  "Insert a tool-call entry for tool NAME with INPUT into the history area."
   (copilot-agent-ui--history-insert
    (concat "\n"
            (propertize (format "[Tool: %s]" name) 'face 'copilot-agent-tool-name-face)
@@ -187,6 +192,7 @@ The full result is always sent to the LLM; this only affects display."
   :group 'copilot-agent)
 
 (defun copilot-agent-ui-insert-tool-result (name result)
+  "Insert a tool RESULT for tool NAME into the history area, truncating if needed."
   (copilot-agent-ui--history-insert
    (format "[Result: %s]\n" name) 'copilot-agent-tool-result-face)
   (let* ((limit   (max 0 copilot-agent-tool-result-max-lines))
@@ -208,6 +214,7 @@ The full result is always sent to the LLM; this only affects display."
        'font-lock-comment-face))))
 
 (defun copilot-agent-ui-insert-error (message)
+  "Insert an error MESSAGE into the history area."
   (copilot-agent-ui--history-insert
    (concat "\n"
            (propertize (format "Error: %s" message) 'face 'copilot-agent-error-face)
@@ -216,6 +223,7 @@ The full result is always sent to the LLM; this only affects display."
 ;;; ---------- Thinking indicator ----------
 
 (defun copilot-agent-ui--show-thinking ()
+  "Show the Thinking… indicator overlay in the chat buffer."
   (with-current-buffer (copilot-agent-ui-get-buffer)
     (copilot-agent-ui--hide-thinking)
     (let ((ov (make-overlay (marker-position copilot-agent-ui--history-end-marker)
@@ -225,6 +233,7 @@ The full result is always sent to the LLM; this only affects display."
       (setq copilot-agent-ui--thinking-overlay ov))))
 
 (defun copilot-agent-ui--hide-thinking ()
+  "Remove the Thinking… indicator overlay from the chat buffer."
   (when copilot-agent-ui--thinking-overlay
     (delete-overlay copilot-agent-ui--thinking-overlay)
     (setq copilot-agent-ui--thinking-overlay nil)))
@@ -247,8 +256,9 @@ The full result is always sent to the LLM; this only affects display."
 ;;; ---------- Tool approval ----------
 
 (defun copilot-agent-ui-approve-tool (name input session)
-  "Prompt in the minibuffer to approve running tool NAME.
-Returns t if approved, nil if declined."
+  "Prompt in the minibuffer to approve running tool NAME with INPUT.
+SESSION is checked for :approve-all before prompting.
+Return t if approved, nil if declined."
   (if (plist-get session :approve-all)
       t
     (let* ((args-str (if (listp input)

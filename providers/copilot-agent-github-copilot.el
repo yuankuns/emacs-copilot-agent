@@ -1,5 +1,7 @@
 ;;; copilot-agent-github-copilot.el --- GitHub Copilot provider -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "../copilot-agent.el"
+
 ;;; Commentary:
 ;; Provider for GitHub Copilot via a direct GitHub OAuth device flow.
 ;; No API key or `gh' CLI required — authenticate once with your GitHub
@@ -51,7 +53,7 @@
 
 (defcustom copilot-agent-github-copilot-default-model "gpt-4o"
   "Default GitHub Copilot model.
-Run M-x copilot-agent-github-copilot-list-models to see what is available
+Run \\[copilot-agent-github-copilot-list-models] to see what is available
 for your subscription, then set this to any model ID from that list."
   :type 'string
   :group 'copilot-agent)
@@ -78,9 +80,9 @@ for your subscription, then set this to any model ID from that list."
 ;; GitHub to return URL-encoded responses instead of JSON.
 
 (defun copilot-agent-github-copilot--curl-sync (method url headers &optional body)
-  "Make a synchronous HTTP request via curl and return parsed JSON.
+  "Make a synchronous HTTP request via curl to URL and return parsed JSON.
 METHOD is \"GET\" or \"POST\".  HEADERS is a list of \"Name: Value\" strings.
-BODY is the URL-encoded POST body string.  Signals an error on failure."
+BODY is the URL-encoded POST body string.  Signal an error on failure."
   (let ((req-file (when body (make-temp-file "copilot-agent-gh-req"))))
     (when req-file
       (write-region body nil req-file nil 'silent))
@@ -140,7 +142,7 @@ BODY is the URL-encoded POST body string.  Signals an error on failure."
 
 (defun copilot-agent-github-copilot--fetch-session-token (github-token)
   "Exchange GITHUB-TOKEN for a short-lived Copilot session token.
-Caches the result in memory. Returns the token string."
+Cache the result in memory.  Return the token string."
   (let* ((result  (copilot-agent-github-copilot--get-json
                    copilot-agent-github-copilot--session-token-url
                    github-token))
@@ -214,7 +216,7 @@ one-time code to approve access.  The GitHub OAuth token is saved to
       (if token
           (message "GitHub Copilot login successful!  Credentials saved to %s"
                    copilot-agent-github-copilot--creds-file)
-        (error "GitHub Copilot login timed out.  Run M-x copilot-agent-github-copilot-login again.")))))
+        (error "GitHub Copilot login timed out -- run M-x copilot-agent-github-copilot-login again")))))
 
 ;;; ---------- Model List (cached) ----------
 
@@ -448,17 +450,16 @@ CALLBACK is called as (RESPONSE-PLIST NIL) or (NIL ERROR-STRING)."
 
 ;;; ---------- Provider Registration ----------
 
-(with-eval-after-load 'copilot-agent-api
-  (copilot-agent-api-register-provider
-   'github-copilot
-   (list :display-name        "GitHub Copilot"
-         :default-model       copilot-agent-github-copilot-default-model
-         :default-model-fn    (lambda () copilot-agent-github-copilot-default-model)
-         :send-fn             #'copilot-agent-github-copilot-send
-         :make-tool-result-fn #'copilot-agent-github-copilot-make-tool-result-message
-         :format-tools-fn     #'copilot-agent-github-copilot--format-tools
-         :list-models-fn      #'copilot-agent-github-copilot--list-models
-         :set-model-fn        #'copilot-agent-github-copilot--set-model)))
+(copilot-agent-api-register-provider
+ 'github-copilot
+ (list :display-name        "GitHub Copilot"
+       :default-model       copilot-agent-github-copilot-default-model
+       :default-model-fn    (lambda () copilot-agent-github-copilot-default-model)
+       :send-fn             #'copilot-agent-github-copilot-send
+       :make-tool-result-fn #'copilot-agent-github-copilot-make-tool-result-message
+       :format-tools-fn     #'copilot-agent-github-copilot--format-tools
+       :list-models-fn      #'copilot-agent-github-copilot--list-models
+       :set-model-fn        #'copilot-agent-github-copilot--set-model))
 
 (provide 'copilot-agent-github-copilot)
 ;;; copilot-agent-github-copilot.el ends here

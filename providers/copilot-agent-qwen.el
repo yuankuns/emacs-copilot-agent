@@ -1,5 +1,7 @@
 ;;; copilot-agent-qwen.el --- Qwen portal provider (free OAuth tier) -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "../copilot-agent.el"
+
 ;;; Commentary:
 ;; Provider for Alibaba's Qwen models via the free-tier portal OAuth flow.
 ;; No API key required — authenticate once with your Qwen account and tokens
@@ -138,14 +140,14 @@ Returns updated creds alist or signals an error."
 
 (defun copilot-agent-qwen--valid-access-token ()
   "Return a valid access token string, refreshing if needed.
-Signals an error if no credentials exist (run M-x copilot-agent-qwen-login)."
+Signal an error if no credentials exist (run \\[copilot-agent-qwen-login])."
   (let* ((creds   (copilot-agent-qwen--load-creds))
          (access  (and creds (cdr (assq 'access_token  creds))))
          (refresh (and creds (cdr (assq 'refresh_token creds))))
          (expires (and creds (cdr (assq 'expires       creds))))
          (now-ms  (truncate (* (float-time) 1000))))
     (unless access
-      (error "No Qwen credentials found.  Run M-x copilot-agent-qwen-login first."))
+      (error "No Qwen credentials found -- run M-x copilot-agent-qwen-login first"))
     ;; Refresh if token expires within 60 s
     (if (and expires (> (- expires now-ms) 60000))
         access
@@ -213,7 +215,7 @@ Tokens are saved to ~/.emacs-copilot-agent/qwen_oauth_creds.json."
       (if token
           (message "Qwen login successful!  Credentials saved to %s"
                    copilot-agent-qwen--creds-file)
-        (error "Qwen login timed out.  Run M-x copilot-agent-qwen-login again.")))))
+        (error "Qwen login timed out -- run M-x copilot-agent-qwen-login again")))))
 
 ;;; ---------- Tool Schema Formatting ----------
 
@@ -378,17 +380,16 @@ OpenAI-compatible APIs require one {\"role\":\"tool\"} message per tool call."
 
 ;;; ---------- Provider Registration ----------
 
-(with-eval-after-load 'copilot-agent-api
-  (copilot-agent-api-register-provider
-   'qwen
-   (list :display-name        "Alibaba Qwen (free portal)"
-         :default-model       copilot-agent-qwen-default-model
-         :default-model-fn    (lambda () copilot-agent-qwen-default-model)
-         :send-fn             #'copilot-agent-qwen-send
-         :make-tool-result-fn #'copilot-agent-qwen-make-tool-result-message
-         :format-tools-fn     #'copilot-agent-qwen--format-tools
-         :list-models-fn      #'copilot-agent-qwen--list-models
-         :set-model-fn        #'copilot-agent-qwen--set-model)))
+(copilot-agent-api-register-provider
+ 'qwen
+ (list :display-name        "Alibaba Qwen (free portal)"
+       :default-model       copilot-agent-qwen-default-model
+       :default-model-fn    (lambda () copilot-agent-qwen-default-model)
+       :send-fn             #'copilot-agent-qwen-send
+       :make-tool-result-fn #'copilot-agent-qwen-make-tool-result-message
+       :format-tools-fn     #'copilot-agent-qwen--format-tools
+       :list-models-fn      #'copilot-agent-qwen--list-models
+       :set-model-fn        #'copilot-agent-qwen--set-model))
 
 (provide 'copilot-agent-qwen)
 ;;; copilot-agent-qwen.el ends here

@@ -135,7 +135,7 @@ commands target the right directory (including remote SSH via TRAMP)."
 
 ;;;###autoload
 (defun copilot-agent-explain-region (beg end)
-  "Send the selected region to the agent with an explanation request."
+  "Send the selected region BEG..END to the agent with an explanation request."
   (interactive "r")
   (unless (use-region-p)
     (user-error "No region selected"))
@@ -223,7 +223,7 @@ commands target the right directory (including remote SSH via TRAMP)."
 ;;;###autoload
 (defun copilot-agent-select-model ()
   "Select a provider and model globally from all registered providers.
-Shows a completing-read of \"provider / model\" entries.  Selecting one
+Shows a `completing-read' of \"provider / model\" entries.  Selecting one
 sets `copilot-agent-provider' and the provider's default model variable,
 affecting all new chat sessions.
 
@@ -273,7 +273,7 @@ to disk; run `copilot-agent-github-copilot-refresh-models' to update."
 
 ;;;###autoload
 (defun copilot-agent-clear-history ()
-  "Clear the message history of the current session (keeps the session open)."
+  "Clear the message history of the current session (keep the session open)."
   (interactive)
   (with-current-buffer (copilot-agent-ui-get-buffer)
     (when copilot-agent-ui--session

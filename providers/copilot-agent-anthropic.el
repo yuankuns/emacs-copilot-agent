@@ -1,5 +1,7 @@
 ;;; copilot-agent-anthropic.el --- Anthropic Claude provider -*- lexical-binding: t -*-
 
+;; Package-Lint-Main-File: "../copilot-agent.el"
+
 ;;; Commentary:
 ;; Implements the copilot-agent provider protocol for Anthropic Claude.
 ;;
@@ -13,7 +15,7 @@
 
 (require 'auth-source)
 (require 'json)
-(require 'copilot-agent-api nil t)
+(require 'copilot-agent-api)
 
 ;;; ---------- Configuration ----------
 
@@ -170,17 +172,16 @@ TOOL-RESULTS is a list of plists with :tool-use-id and :content."
 
 ;;; ---------- Provider Registration ----------
 
-(with-eval-after-load 'copilot-agent-api
-  (copilot-agent-api-register-provider
-   'anthropic
-   (list :display-name          "Anthropic Claude"
+(copilot-agent-api-register-provider
+ 'anthropic
+ (list :display-name          "Anthropic Claude"
          :default-model         copilot-agent-anthropic-default-model
          :default-model-fn      (lambda () copilot-agent-anthropic-default-model)
          :send-fn               #'copilot-agent-anthropic-send
          :make-tool-result-fn   #'copilot-agent-anthropic-make-tool-result-message
          :format-tools-fn       #'copilot-agent-anthropic--format-tools
          :list-models-fn        #'copilot-agent-anthropic--list-models
-         :set-model-fn          #'copilot-agent-anthropic--set-model)))
+         :set-model-fn          #'copilot-agent-anthropic--set-model))
 
 (provide 'copilot-agent-anthropic)
 ;;; copilot-agent-anthropic.el ends here
