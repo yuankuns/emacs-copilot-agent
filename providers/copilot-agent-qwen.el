@@ -1,6 +1,6 @@
 ;;; copilot-agent-qwen.el --- Qwen portal provider (free OAuth tier) -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "../copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Provider for Alibaba's Qwen models via the free-tier portal OAuth flow.
@@ -32,7 +32,7 @@
 (defconst copilot-agent-qwen--scope         "openid profile email model.completion")
 (defconst copilot-agent-qwen--api-base      "https://portal.qwen.ai/v1")
 (defconst copilot-agent-qwen--creds-file
-  (expand-file-name "~/.emacs-copilot-agent/qwen_oauth_creds.json")
+  (expand-file-name "emacs-copilot-agent/qwen_oauth_creds.json" user-emacs-directory)
   "Path where Qwen OAuth tokens are stored.")
 
 ;;; ---------- Customisation ----------
@@ -161,7 +161,8 @@ Signal an error if no credentials exist (run \\[copilot-agent-qwen-login])."
 (defun copilot-agent-qwen-login ()
   "Authenticate with Qwen using the device-code OAuth flow (free tier).
 Opens a browser URL; enter the displayed code to approve access.
-Tokens are saved to ~/.emacs-copilot-agent/qwen_oauth_creds.json."
+Tokens are saved to `emacs-copilot-agent/qwen_oauth_creds.json' in
+`user-emacs-directory'."
   (interactive)
   (let* ((pkce      (copilot-agent-qwen--pkce))
          (verifier  (car pkce))

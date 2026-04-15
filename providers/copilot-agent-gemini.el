@@ -1,6 +1,6 @@
 ;;; copilot-agent-gemini.el --- Google Gemini provider -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "../copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Implements the copilot-agent provider protocol for Google Gemini.
@@ -210,7 +210,7 @@ Returns the assigned port number."
 ;;; ---------- CLI Auth — Credential Storage ----------
 
 (defconst copilot-agent-gemini--cli-creds-file
-  (expand-file-name "~/.emacs-copilot-agent/gemini_oauth_creds.json")
+  (expand-file-name "emacs-copilot-agent/gemini_oauth_creds.json" user-emacs-directory)
   "Path where Gemini CLI OAuth tokens are stored.")
 
 (defun copilot-agent-gemini--cli-save-creds (access refresh expires &optional project)
@@ -382,7 +382,7 @@ and returns the resulting project ID string."
   "Authenticate with Gemini using the installed Gemini CLI's OAuth credentials.
 Reads the client_id and client_secret from the Gemini CLI's bundled oauth2.js,
 performs a PKCE browser auth flow, and saves tokens to
-~/.emacs-copilot-agent/gemini_oauth_creds.json.
+`emacs-copilot-agent/gemini_oauth_creds.json' in `user-emacs-directory'.
 
 Requires the Gemini CLI to be installed:
   brew install gemini-cli  or  npm install -g @google/gemini-cli"

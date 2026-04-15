@@ -1,6 +1,6 @@
 ;;; copilot-agent-api.el --- Provider registry, HTTP, and agentic loop -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Provider-agnostic core layer.  Responsibilities:
@@ -130,8 +130,8 @@ appear in any API response body.")
 
 (defun copilot-agent-api--curl-post (url headers json-body callback)
   "POST JSON-BODY string to URL with HEADERS list asynchronously via curl.
-CALLBACK is called as (BODY-STRING NIL) on success or
-(NIL ERROR-STRING) on failure."
+CALLBACK is called as \(BODY-STRING NIL) on success or
+\(NIL ERROR-STRING) on failure."
   (let* ((req-file (make-temp-file "copilot-agent-req" nil ".json"))
          (resp-buf (generate-new-buffer " *copilot-agent-http*")))
     (write-region json-body nil req-file nil 'silent)

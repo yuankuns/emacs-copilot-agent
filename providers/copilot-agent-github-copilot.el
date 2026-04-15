@@ -1,6 +1,6 @@
 ;;; copilot-agent-github-copilot.el --- GitHub Copilot provider -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "../copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Provider for GitHub Copilot via a direct GitHub OAuth device flow.
@@ -46,7 +46,7 @@
   "GitHub OAuth App client ID (same one used by copilot.vim / copilot.lua).")
 
 (defconst copilot-agent-github-copilot--creds-file
-  (expand-file-name "~/.emacs-copilot-agent/github_copilot_creds.json")
+  (expand-file-name "emacs-copilot-agent/github_copilot_creds.json" user-emacs-directory)
   "Path where the GitHub OAuth token is persisted.")
 
 ;;; ---------- Customisation ----------
@@ -69,7 +69,7 @@ for your subscription, then set this to any model ID from that list."
 ;;; ---------- Model list cache ----------
 
 (defconst copilot-agent-github-copilot--models-cache-file
-  (expand-file-name "~/.emacs-copilot-agent/github_copilot_models.json")
+  (expand-file-name "emacs-copilot-agent/github_copilot_models.json" user-emacs-directory)
   "Path where the fetched Copilot model list is persisted.")
 
 (defvar copilot-agent-github-copilot--models-cache nil
@@ -173,7 +173,7 @@ Cache the result in memory.  Return the token string."
   "Authenticate with GitHub using the OAuth device-code flow.
 Opens https://github.com/login/device in a browser; enter the displayed
 one-time code to approve access.  The GitHub OAuth token is saved to
-~/.emacs-copilot-agent/github_copilot_creds.json."
+`emacs-copilot-agent/github_copilot_creds.json' in `user-emacs-directory'."
   (interactive)
   ;; Step 1: request a device code
   (let* ((device      (copilot-agent-github-copilot--post-form
