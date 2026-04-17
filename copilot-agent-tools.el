@@ -196,7 +196,7 @@ expanded against the context directory."
         ("delete_file"      (copilot-agent-tools--delete-file args))
         ("edit_file"        (copilot-agent-tools--edit-file args))
         (_ (format "Unknown tool: %s" name)))
-    (error "Tool execution error: %s" (error-message-string err))))
+    (error (format "Tool execution error: %s" (error-message-string err)))))
 
 ;;; ---------- Tool Implementations ----------
 
