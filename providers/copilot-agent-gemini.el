@@ -13,7 +13,7 @@
 ;;   cli — OAuth via the installed Gemini CLI (no API key needed):
 ;;     1. Install Gemini CLI:  brew install gemini-cli  (or npm -g @google/gemini-cli)
 ;;     2. M-x copilot-agent-gemini-login
-;;     Tokens are saved to ~/.emacs-copilot-agent/gemini_oauth_creds.json.
+;;     Tokens are saved to emacs-copilot-agent/gemini_oauth_creds.json in user-emacs-directory.
 ;;     The client_id / client_secret are read from the installed Gemini CLI's
 ;;     own oauth2.js bundle, so no separate Google Cloud project is needed.
 ;;

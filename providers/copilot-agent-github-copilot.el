@@ -5,7 +5,7 @@
 ;;; Commentary:
 ;; Provider for GitHub Copilot via a direct GitHub OAuth device flow.
 ;; No API key or `gh' CLI required — authenticate once with your GitHub
-;; account; the token is stored in ~/.emacs-copilot-agent/github_copilot_creds.json.
+;; account; the token is stored in emacs-copilot-agent/github_copilot_creds.json in user-emacs-directory.
 ;;
 ;; Auth flow (GitHub OAuth 2.0 Device Authorization Grant):
 ;;   M-x copilot-agent-github-copilot-login

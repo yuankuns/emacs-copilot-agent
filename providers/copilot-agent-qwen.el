@@ -5,7 +5,7 @@
 ;;; Commentary:
 ;; Provider for Alibaba's Qwen models via the free-tier portal OAuth flow.
 ;; No API key required — authenticate once with your Qwen account and tokens
-;; are stored in ~/.emacs-copilot-agent/qwen_oauth_creds.json.
+;; are stored in emacs-copilot-agent/qwen_oauth_creds.json in user-emacs-directory.
 ;;
 ;; Auth flow (OAuth 2.0 Device Authorization Grant + PKCE):
 ;;   M-x copilot-agent-qwen-login
