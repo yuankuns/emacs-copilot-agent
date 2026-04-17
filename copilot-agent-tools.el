@@ -271,7 +271,7 @@ expanded against the context directory."
                 (dir?  (eq t (file-attribute-type attrs)))
                 (size  (file-attribute-size attrs))
                 (mtime (format-time-string
-                        "%Y-%m-%d %H:%M"
+                        "%F %R"
                         (file-attribute-modification-time attrs))))
            (format "%s  %8s  %s%s"
                    mtime

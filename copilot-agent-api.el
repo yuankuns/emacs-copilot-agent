@@ -31,7 +31,7 @@ tool-call parsing or provider communication issues."
   (when copilot-agent-debug
     (with-current-buffer (get-buffer-create "*copilot-agent-debug*")
       (goto-char (point-max))
-      (insert (format-time-string "[%H:%M:%S] "))
+      (insert (format-time-string "[%T] "))
       (insert (apply #'format fmt args))
       (insert "\n"))))
 
