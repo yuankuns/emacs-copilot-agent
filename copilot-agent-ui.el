@@ -40,15 +40,15 @@
   :group 'copilot-agent)
 
 (defface copilot-agent-user-face
-  '((t :inherit font-lock-keyword-face :weight bold))
+  '((t :inherit font-lock-keyword-face))
   "Face for the You label.")
 
 (defface copilot-agent-assistant-face
-  '((t :inherit font-lock-function-name-face :weight bold))
+  '((t :inherit font-lock-function-name-face))
   "Face for the Assistant label.")
 
 (defface copilot-agent-tool-name-face
-  '((t :inherit font-lock-type-face :weight bold))
+  '((t :inherit font-lock-type-face))
   "Face for tool names.")
 
 (defface copilot-agent-tool-result-face
@@ -56,7 +56,7 @@
   "Face for tool result output.")
 
 (defface copilot-agent-error-face
-  '((t :inherit error :weight bold))
+  '((t :inherit error))
   "Face for error messages.")
 
 (defface copilot-agent-separator-face
@@ -64,11 +64,11 @@
   "Face for the separator line.")
 
 (defface copilot-agent-prompt-face
-  '((t :inherit minibuffer-prompt :weight bold))
+  '((t :inherit minibuffer-prompt))
   "Face for the > input prompt.")
 
 (defface copilot-agent-thinking-face
-  '((t :inherit font-lock-comment-face :slant italic))
+  '((t :inherit font-lock-comment-face))
   "Face for the Thinking indicator.")
 
 ;;; ---------- Buffer-local state ----------
