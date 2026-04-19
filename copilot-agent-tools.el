@@ -1,6 +1,6 @@
 ;;; copilot-agent-tools.el --- Tool definitions and TRAMP-aware execution -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Defines the tool schema (sent to LLMs) and their implementations.
@@ -196,7 +196,7 @@ expanded against the context directory."
         ("delete_file"      (copilot-agent-tools--delete-file args))
         ("edit_file"        (copilot-agent-tools--edit-file args))
         (_ (format "Unknown tool: %s" name)))
-    (error (format "Tool execution error: %s" (error-message-string err)))))
+    (error (error-message-string err))))
 
 ;;; ---------- Tool Implementations ----------
 
@@ -271,7 +271,7 @@ expanded against the context directory."
                 (dir?  (eq t (file-attribute-type attrs)))
                 (size  (file-attribute-size attrs))
                 (mtime (format-time-string
-                        "%Y-%m-%d %H:%M"
+                        "%F %R"
                         (file-attribute-modification-time attrs))))
            (format "%s  %8s  %s%s"
                    mtime
@@ -340,9 +340,9 @@ or if OLD_STRING matches more than once (ambiguous edit)."
                       n)))
       (cond
        ((= count 0)
-        (error "edit_file: old_string not found in %s" path))
+        (error "Edit_file: old_string not found in %s" path))
        ((> count 1)
-        (error "edit_file: old_string matches %d times in %s — add more context to make it unique"
+        (error "Edit_file: old_string matches %d times in %s — add more context to make it unique"
                count path)))
       ;; Exactly one match — replace it.
       (let ((new-content (concat

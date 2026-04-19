@@ -1,6 +1,6 @@
 ;;; copilot-agent-status.el --- Model status display -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; M-x copilot-agent-status  — show current provider, model, context window,

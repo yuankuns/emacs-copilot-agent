@@ -1,6 +1,6 @@
 ;;; copilot-agent-anthropic.el --- Anthropic Claude provider -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "../copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Implements the copilot-agent provider protocol for Anthropic Claude.

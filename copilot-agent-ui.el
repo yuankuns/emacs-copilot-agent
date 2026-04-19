@@ -1,6 +1,6 @@
 ;;; copilot-agent-ui.el --- Chat buffer UI -*- lexical-binding: t -*-
 
-;; Package-Lint-Main-File: "copilot-agent.el"
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; Provides the interactive chat buffer for copilot-agent.

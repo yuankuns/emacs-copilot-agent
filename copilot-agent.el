@@ -5,6 +5,7 @@
 ;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: ai llm agent tools copilot
 ;; URL: https://github.com/yuankuns/emacs-copilot-agent
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; An Emacs AI coding agent similar to VSCode Copilot Chat.
@@ -27,6 +28,10 @@
 ;;   RET / C-c C-c  send message
 ;;   C-c C-n        new session
 ;;   C-c C-k        clear history
+;;
+;; To bind a global prefix key, add to your init file:
+;;   (global-set-key (kbd "C-c a") 'copilot-agent-command-map)
+;; or call `copilot-agent-setup-keybindings' after loading.
 
 ;;; Code:
 
