@@ -91,7 +91,7 @@ M-x copilot-agent
 
 | Requirement | Version |
 |---|---|
-| Emacs | 27.1 or later |
+| Emacs | 28.1 or later |
 | curl | any recent version (used for HTTP) |
 | An API key or free account | Anthropic, Gemini, Qwen, or GitHub Copilot |
 
@@ -236,7 +236,7 @@ Then in `init.el`:
    M-x copilot-agent-gemini-login
    ```
    A browser window opens for Google OAuth.  Tokens are saved to
-   `~/.emacs-copilot-agent/gemini_oauth_creds.json` and auto-refreshed.
+   `~/.emacs.d/emacs-copilot-agent/gemini_oauth_creds.json` and auto-refreshed.
 
 ### Alibaba Qwen (free — OAuth, no API key)
 
@@ -249,7 +249,7 @@ Then in `init.el`:
    M-x copilot-agent-qwen-login
    ```
    A browser window opens to <https://chat.qwen.ai>.  Approve the device,
-   then return to Emacs.  Tokens are saved to `~/.qwen/oauth_creds.json`
+   then return to Emacs.  Tokens are saved to `~/.emacs.d/emacs-copilot-agent/qwen_oauth_creds.json`
    and auto-refreshed.  Free tier: 2 000 requests/day.
 
 ### GitHub Copilot (requires active Copilot subscription, no API key)
@@ -264,7 +264,7 @@ Then in `init.el`:
    ```
    A browser window opens to `github.com/login/device`; the one-time code
    is copied to your clipboard.  After approval, the token is saved to
-   `~/.emacs-copilot-agent/github_copilot_creds.json`.  Short-lived session
+   `~/.emacs.d/emacs-copilot-agent/github_copilot_creds.json`.  Short-lived session
    tokens (~30 min) are fetched and refreshed automatically.
 3. Browse available models (GPT-4o, Claude, Gemini, …):
    ```
@@ -420,8 +420,11 @@ respect the active working directory, including remote TRAMP paths.
 | `shell_command` | Run a shell command; output is returned to the agent |
 | `read_file` | Read the full contents of a file |
 | `write_file` | Write content to a file (creates parent directories) |
+| `edit_file` | Surgically replace an exact string in a file |
 | `list_directory` | List directory contents with sizes and timestamps |
 | `find_in_files` | Grep for a regex pattern across files (like `grep -rn`) |
+| `glob` | Find files matching a glob pattern (e.g. `*.el`) |
+| `grep` | Search for a regex pattern in files with context lines |
 | `create_directory` | Create a directory and any missing parents |
 | `delete_file` | Delete a file (requires approval) |
 
@@ -526,12 +529,15 @@ emacs-copilot-agent/
 │   ├── copilot-agent-qwen.el            Alibaba Qwen backend (free OAuth)
 │   └── copilot-agent-github-copilot.el  GitHub Copilot backend (OAuth device flow)
 └── test/
-    ├── run-tests.el                  Test runner (all suites)
-    ├── test-copilot-agent-tools.el   Tool tests
-    ├── test-copilot-agent-api.el     API/loop tests
-    ├── test-copilot-agent-anthropic.el  Anthropic provider tests
-    ├── test-copilot-agent-gemini.el     Gemini provider tests
-    └── test-copilot-agent-qwen.el       Qwen provider tests
+    ├── run-tests.el                      Test runner (all suites)
+    ├── test-copilot-agent-tools.el       Tool tests
+    ├── test-copilot-agent-api.el         API/loop tests
+    ├── test-copilot-agent-ui.el          UI/chat buffer tests
+    ├── test-copilot-agent-status.el      Status display tests
+    ├── test-copilot-agent-anthropic.el   Anthropic provider tests
+    ├── test-copilot-agent-gemini.el      Gemini provider tests
+    ├── test-copilot-agent-qwen.el        Qwen provider tests
+    └── test-regressions.el               Regression tests
 ```
 
 ---
